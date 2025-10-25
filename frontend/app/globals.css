@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #1a1a1a;
 }
 
 @theme inline {
@@ -10,6 +10,31 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Citrus Burst Color Palette */
+  --color-primary-*: initial;
+  --color-primary-50: #FFF5F0;
+  --color-primary-100: #FFE5D9;
+  --color-primary-200: #FFCAB3;
+  --color-primary-300: #FFAF8C;
+  --color-primary-400: #FFA07A;
+  --color-primary-500: #FF8C42;
+  --color-primary-600: #FF7A30;
+  --color-primary-700: #F76520;
+  --color-primary-800: #E04E0F;
+  --color-primary-900: #C23E05;
+
+  --color-accent-*: initial;
+  --color-accent-50: #E6FBF5;
+  --color-accent-100: #CCF7EB;
+  --color-accent-200: #99EFD7;
+  --color-accent-300: #66E7C3;
+  --color-accent-400: #33DFAF;
+  --color-accent-500: #06D6A0;
+  --color-accent-600: #05AB80;
+  --color-accent-700: #048060;
+  --color-accent-800: #035540;
+  --color-accent-900: #022B20;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,5 +70,5 @@ a {
 }
 
 ::selection {
-  background: rgba(56, 189, 248, 0.3);
+  background: rgba(255, 140, 66, 0.3);
 }

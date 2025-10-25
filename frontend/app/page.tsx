@@ -201,13 +201,6 @@ export default function Home() {
                 Mermaid rendering to visualize complex concepts instantly.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-              <h3 className="text-lg font-semibold">Sponsor integrations</h3>
-              <p className="mt-3 text-sm text-slate-200">
-                Check sponsor list!!! Tailor branded learning experiences while
-                keeping accessibility at the center.
-              </p>
-            </div>
           </div>
         </div>
       </section>

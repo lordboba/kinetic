@@ -4,3 +4,4 @@ node_modules/
 .env
 **/.env
 @test-outputs/
+service-account-key.json
