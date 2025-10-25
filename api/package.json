@@ -17,6 +17,7 @@
     "fastify": "^4.26.2",
     "livekit-server-sdk": "^2.14.0",
     "nanoid": "^5.0.7",
+    "schema": "link:../types",
     "ws": "^8.18.0",
     "zod": "^4.1.12"
   },
