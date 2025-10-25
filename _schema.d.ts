@@ -91,7 +91,7 @@ type CreateLectureMainRequest = {
 
 // everything below here will be sent over ws //
 
-// 4. Backend responds by opeing a web socket (opening a lane)
+// 4. Backend responds by opening a web socket (opening a lane)
 type CreateLectureMainResponse = {
     // service will update client when a request finishes 
     /** status/heartbeat? */
