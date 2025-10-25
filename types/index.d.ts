@@ -73,6 +73,7 @@ type CreateLectureInitialRequest = {
   user_id: Uuid;
   lecture_topic: string;
   file_uploads: FileUpload[];
+  custom_preferences: LecturePreferences;
 };
 
 // 2. Backend responds with question to refine topic

@@ -164,10 +164,7 @@ Adjust your response according to the current lecture preferences:
         ? "Use a friendly, supportive, and encouraging tone, as if guiding a student patiently."
         : "Add light humor or playful analogies where appropriate, keeping the content accurate and engaging."
   }
-
 `;
 
-  const transcript = await llm.sendMessage(PROMPT, ZGenerateTranscriptResponse);
-
-  return transcript;
+  return llm.sendMessage(PROMPT, ZGenerateTranscriptResponse);
 }
