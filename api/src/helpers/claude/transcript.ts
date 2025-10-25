@@ -16,6 +16,7 @@ export type GenerateTranscriptRequest = {
   custom_preferences?: LecturePreferences;
 };
 
+// validates AI's response structure 
 export const ZGenerateTranscriptResponse = z.array(
   z.object({
     transcript: z.string(),
@@ -50,6 +51,7 @@ export const ZGenerateTranscriptResponse = z.array(
   })
 );
 
+// converts Q&A pairs into readable text format 
 const question_answer_to_text = (
   question: CreateLectureQuestion,
   answer: CreateLectureAnswer

@@ -1,7 +1,10 @@
 import GoogleImages from "google-images";
 
 // Initialize Google Images client
-const googleClient = new GoogleImages('f3db6e917c3b04c79', 'AIzaSyArlAY_4SmgDw39oHdzxc7KciwgJm2FCxA');
+const googleClient = new GoogleImages(
+  process.env.GOOGLE_CSE_ID!,
+  process.env.GOOGLE_API_KEY!
+);
 
 /**
  * Takes a keyword and optional description, returns the top image URL from Google Images

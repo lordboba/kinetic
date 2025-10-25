@@ -12,15 +12,11 @@ async function testDiagramGeneration() {
 
   // Test 1: Neural network diagram
   console.log('--- Test 1: Neural Network Flowchart ---');
-  const transcript1 = `
-    Neural networks process information through layers.
-    Data flows from the input layer through hidden layers where
-    it's transformed, and finally reaches the output layer for predictions.
-  `;
-  const description1 = 'Create a flowchart showing the flow of data through a neural network from input to output';
-
   try {
-    const mermaid1 = await generateMermaidDiagram(llm, transcript1, description1);
+    const mermaid1 = await generateMermaidDiagram(llm, {
+      diagram_type: 'flowchart-LR',
+      extended_description: 'Create a flowchart showing the flow of data through a neural network from input layer through hidden layers to output layer for predictions'
+    });
     console.log('Mermaid Code:');
     console.log(mermaid1);
     console.log();
@@ -30,15 +26,11 @@ async function testDiagramGeneration() {
 
   // Test 2: Photosynthesis process
   console.log('--- Test 2: Photosynthesis Process ---');
-  const transcript2 = `
-    Photosynthesis converts light energy into chemical energy in two stages.
-    First, light-dependent reactions split water and produce ATP.
-    Then, the Calvin cycle uses that ATP to convert CO2 into glucose.
-  `;
-  const description2 = 'Create a flowchart diagram showing the two-stage process of photosynthesis';
-
   try {
-    const mermaid2 = await generateMermaidDiagram(llm, transcript2, description2);
+    const mermaid2 = await generateMermaidDiagram(llm, {
+      diagram_type: 'flowchart-TB',
+      extended_description: 'Create a flowchart diagram showing the two-stage process of photosynthesis: light-dependent reactions that split water and produce ATP, then the Calvin cycle that uses ATP to convert CO2 into glucose'
+    });
     console.log('Mermaid Code:');
     console.log(mermaid2);
     console.log();
@@ -48,15 +40,11 @@ async function testDiagramGeneration() {
 
   // Test 3: Class hierarchy
   console.log('--- Test 3: Programming Class Hierarchy ---');
-  const transcript3 = `
-    In object-oriented programming, we have a base Animal class.
-    Dog and Cat inherit from Animal. Dog has a bark method while Cat has a meow method.
-    All animals have an eat method.
-  `;
-  const description3 = 'Create a class diagram showing the inheritance hierarchy of Animal, Dog, and Cat classes';
-
   try {
-    const mermaid3 = await generateMermaidDiagram(llm, transcript3, description3);
+    const mermaid3 = await generateMermaidDiagram(llm, {
+      diagram_type: 'classDiagram',
+      extended_description: 'Create a class diagram showing the inheritance hierarchy where Animal is the base class with an eat method, Dog inherits from Animal with a bark method, and Cat inherits from Animal with a meow method'
+    });
     console.log('Mermaid Code:');
     console.log(mermaid3);
     console.log();

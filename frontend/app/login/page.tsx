@@ -88,10 +88,6 @@ export default function LoginPage() {
         <h1 className="text-3xl font-semibold text-slate-900">
           {mode === "login" ? "Welcome back" : "Create your learning profile"}
         </h1>
-        <p className="text-slate-600">
-          Use your Firebase credentials to access adaptive lecture templates,
-          personalize delivery, and monitor progress.
-        </p>
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -172,21 +168,6 @@ export default function LoginPage() {
             ? "Need an account? Create one."
             : "Already have an account? Sign in."}
         </button>
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-        <p className="font-semibold text-slate-900">Firebase setup checklist</p>
-        <ul className="mt-3 list-disc space-y-1 pl-5">
-          <li>
-            Fill in <code>NEXT_PUBLIC_FIREBASE_*</code> env vars in your Next.js
-            runtime.
-          </li>
-          <li>Enable Email/Password and Google providers in Firebase Auth.</li>
-          <li>
-            Configure authorized domains so Lecture Gen can complete the OAuth
-            handshake.
-          </li>
-        </ul>
       </div>
     </div>
   );
