@@ -26,6 +26,12 @@ importers:
       '@fastify/websocket':
         specifier: ^10.0.1
         version: 10.0.1
+      '@livekit/agents':
+        specifier: ^1.0.12
+        version: 1.0.12(@livekit/rtc-node@0.13.20)
+      '@livekit/rtc-node':
+        specifier: ^0.13.20
+        version: 0.13.20
       '@types/google-images':
         specifier: ^2.1.4
         version: 2.1.4
@@ -990,6 +996,12 @@ packages:
 
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
+
+  '@types/node-fetch@2.6.13':
+    resolution: {integrity: sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==}
+
+  '@types/node@18.19.130':
+    resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
   '@types/node@20.19.23':
     resolution: {integrity: sha512-yIdlVVVHXpmqRhtyovZAcSy0MiPcYWGkoO4CGe/+jpP0hmNuihm4XhHbADpK++MsiLHP5MVlv+bcgdF99kSiFQ==}
@@ -3871,6 +3883,15 @@ snapshots:
   '@types/keyv@3.1.4':
     dependencies:
       '@types/node': 22.18.12
+
+  '@types/node-fetch@2.6.13':
+    dependencies:
+      '@types/node': 22.18.12
+      form-data: 4.0.4
+
+  '@types/node@18.19.130':
+    dependencies:
+      undici-types: 5.26.5
 
   '@types/node@20.19.23':
     dependencies:
