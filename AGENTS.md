@@ -42,6 +42,7 @@ We let learners assemble their own lecture format by mixing content blocks (expl
 Personalized pacing, modality options, and adaptive scaffolding help learners with different needs—including neurodiverse learners and those with limited access to traditional instruction—stay engaged and absorb material more effectively.
 
 ## Conventions
+- **Type Schemas**: We use [Zod](https://zod.dev/) for runtime type validation and schema definition.
 - Structured outputs should be used for LLM inputs and outputs.
 - Core logic should be a synthesis of a main thread loop that chains the results of many functions together.
 - For code cleanliness purposes, do not write functions that are way too long.
