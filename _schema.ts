@@ -5,6 +5,11 @@ type Audio = null;
 type Diagram = string; // mermaid
 type Image = string; // URLencoded? src?
 type FirebaseStub = null;
+type FileUpload = {
+    file_name: string;
+    file_type: "audio" | "image" | "diagram";
+    file_path: string;
+};
 
 /// DATA ///
 
@@ -44,6 +49,7 @@ type User = {
 
 type CreateLectureInitialRequest = {
     lecture_topic: string;
+    file_uploads: FileUpload[];
 };
 
 type QStub<T> = T & { question: string; id: Uuid };
@@ -56,6 +62,8 @@ type CreateLectureQuestion = QStub<
 
 type CreateLectureInitialResponse = {
     questions: CreateLectureQuestion[];
+    success: boolean;
+    error?: string;
 };
 
 type CreateLectureMainRequest = {};
