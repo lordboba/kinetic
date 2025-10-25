@@ -48,6 +48,7 @@ type User = {
 // Let firebase take care of auth bullshit
 
 type CreateLectureInitialRequest = {
+    lecture_id: Uuid;
     lecture_topic: string;
     file_uploads: FileUpload[];
 };
@@ -67,3 +68,15 @@ type CreateLectureInitialResponse = {
 };
 
 type CreateLectureMainRequest = {};
+
+type AskLectureQuestionRequest = {
+    lecture_id: Uuid;
+    question: string;
+};
+
+type AskLectureQuestionResponse = {
+    answer: string;
+    success: boolean;
+    error?: string;
+};
+
