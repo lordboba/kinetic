@@ -73,7 +73,7 @@ export default function LoginPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="h-12 w-12 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+        <span className="h-12 w-12 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" />
       </div>
     );
   }
@@ -85,17 +85,17 @@ export default function LoginPage() {
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-10 px-6 py-16">
       <div className="space-y-4 text-center">
-        <h1 className="text-3xl font-semibold text-slate-900">
+        <h1 className="text-3xl font-semibold text-foreground">
           {mode === "login" ? "Welcome back" : "Create your learning profile"}
         </h1>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="rounded-3xl border border-primary-200 bg-white p-8 shadow-sm">
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label
               htmlFor="email"
-              className="text-sm font-medium text-slate-700"
+              className="text-sm font-medium text-foreground"
             >
               Email
             </label>
@@ -105,14 +105,14 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="w-full rounded-xl border border-primary-200 px-4 py-3 text-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
               placeholder="you@example.com"
             />
           </div>
           <div className="space-y-2">
             <label
               htmlFor="password"
-              className="text-sm font-medium text-slate-700"
+              className="text-sm font-medium text-foreground"
             >
               Password
             </label>
@@ -122,7 +122,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm transition focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              className="w-full rounded-xl border border-primary-200 px-4 py-3 text-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
               placeholder="Keep it secure"
             />
           </div>
@@ -136,7 +136,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex w-full items-center justify-center rounded-full bg-primary-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 active:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {submitting
               ? "Working on it…"
@@ -151,18 +151,18 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogle}
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex w-full items-center justify-center rounded-full border-2 border-primary-500 px-6 py-3 text-sm font-semibold text-primary-700 transition hover:bg-primary-50 active:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-70"
           >
             Continue with Google
           </button>
         </div>
       </div>
 
-      <div className="text-center text-sm text-slate-600">
+      <div className="text-center text-sm text-foreground/70">
         <button
           type="button"
           onClick={() => setMode(mode === "login" ? "register" : "login")}
-          className="font-semibold text-slate-900 underline-offset-4 transition hover:underline"
+          className="font-semibold text-primary-700 underline-offset-4 transition hover:underline hover:text-primary-800"
         >
           {mode === "login"
             ? "Need an account? Create one."
