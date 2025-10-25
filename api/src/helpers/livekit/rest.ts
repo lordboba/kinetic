@@ -12,8 +12,7 @@ export const RestRequestOptionsSchema = z.object({
 
 export type RestRequestOptions = z.infer<typeof RestRequestOptionsSchema>;
 
-const HttpMethodSchema = z.enum(['GET', 'POST']);
-type HttpMethod = z.infer<typeof HttpMethodSchema>;
+type HttpMethod = 'GET' | 'POST';
 
 export class LiveKitRestClient {
   private readonly baseUrl: string;
@@ -57,6 +56,13 @@ export class LiveKitRestClient {
 
         try {
           const bearerToken = await this.createBearerToken();
+          const requestUrl = this.resolve(path);
+          const requestStart = Date.now();
+
+          // eslint-disable-next-line no-console
+          console.log(
+            `LiveKit REST request -> ${method} ${requestUrl} (attempt ${attempt + 1} of ${retries + 1})`,
+          );
 
           const requestInit: RequestInit = {
             method,
@@ -72,10 +78,20 @@ export class LiveKitRestClient {
             requestInit.body = body as BodyInit;
           }
 
-          const response = await fetch(this.resolve(path), requestInit);
+          const response = await fetch(requestUrl, requestInit);
 
+          const durationMs = Date.now() - requestStart;
+          // eslint-disable-next-line no-console
+          console.log(
+            `LiveKit REST response <- ${method} ${requestUrl} ${response.status} (${durationMs}ms)`,
+          );
+          console.log(response);
           if (!response.ok) {
             const text = await response.text();
+            // eslint-disable-next-line no-console
+            console.error(
+              `LiveKit REST error body <- ${method} ${requestUrl} ${response.status}: ${text}`,
+            );
             throw new Error(`LiveKit request failed with status ${response.status}: ${text}`);
           }
 
@@ -95,6 +111,10 @@ export class LiveKitRestClient {
         if (attempt > retries) {
           break;
         }
+        // eslint-disable-next-line no-console
+        console.warn(
+          `LiveKit REST retry ${attempt} scheduled after error: ${error instanceof Error ? error.message : String(error)}`,
+        );
         await delay(250 * attempt);
       }
     }

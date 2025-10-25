@@ -16,8 +16,8 @@ export type AvatarStyleOptions = z.infer<typeof AvatarStyleOptionsSchema>;
 export const SynthesizeAvatarSpeechRequestSchema = z.object({
   text: z.string(),
   voice: z.string(),
-  format: z.enum(['mp3', 'wav', 'ogg']).optional(),
-  language: z.string().optional(),
+  format: z.enum(['mp3', 'wav', 'ogg']).optional().default('mp3'),
+  language: z.string().optional().default('en-US'),
   avatar: AvatarStyleOptionsSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   endpointPath: z.string().optional(),
@@ -53,6 +53,8 @@ export async function synthesizeAvatarSpeech(
 
   const endpoint = payload.endpointPath ?? DEFAULT_TTS_PATH;
   const response = await client.postJson<typeof body, SynthesizeAvatarSpeechResponse>(endpoint, body);
+  // eslint-disable-next-line no-console
+  console.log('LiveKit TTS response payload:', response);
 
   return response;
 }

@@ -67,6 +67,8 @@ export async function speechToText(request: SpeechToTextRequest): Promise<Speech
 
   const endpoint = request.endpointPath ?? DEFAULT_STT_PATH;
   const response = await client.postJson<typeof body, SpeechToTextResponse>(endpoint, body);
+  // eslint-disable-next-line no-console
+  console.log('LiveKit STT response payload:', response);
   return response;
 }
 
