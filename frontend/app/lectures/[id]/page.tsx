@@ -4,12 +4,13 @@ import { ProtectedContent } from "@/components/auth/protected-content";
 import { LectureDetail } from "@/components/lectures/lecture-detail";
 import { getLectureById } from "@/lib/data/mockLectures";
 
-export default function LectureDetailPage({
+export default async function LectureDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const lecture = getLectureById(params.id);
+  const { id } = await params;
+  const lecture = getLectureById(id);
 
   if (!lecture) {
     notFound();
