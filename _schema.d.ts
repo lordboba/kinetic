@@ -31,7 +31,7 @@ type LectureSlide = {
 };
 
 type Lecture = {
-    id: Uuid;
+    lecture_id: Uuid;
     version: number; // race condition: account for case where user sends new request before prev finishes 
     // share lecture -> ensure only registered users can access 
     permitted_users: User[]; // identify by: user.id; alternatively, Uuid[]
@@ -39,7 +39,7 @@ type Lecture = {
 };
 
 type User = {
-    id: Uuid;
+    user_id: Uuid;
     auth: FirebaseStub | { username: string; password_hash: string };
     user_preferences: LecturePreferences;
     lectures: Lecture[]; // by lecture.id or just uuid[]
@@ -127,3 +127,4 @@ type UserQuestionResponse = {
     lecture_id: Uuid;
 }
 
+type LectureMessage = Omit<Lecture, "allowed_users">
