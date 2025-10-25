@@ -1,14 +1,18 @@
 import { Buffer } from 'node:buffer';
 import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 
 import { getLiveKitRestBaseUrl, requireLiveKitSecret, type LiveKitConfig } from './config.js';
 
-export type RestRequestOptions = {
-  timeoutMs?: number;
-  retryCount?: number;
-};
+export const RestRequestOptionsSchema = z.object({
+  timeoutMs: z.number().optional(),
+  retryCount: z.number().optional(),
+});
 
-type HttpMethod = 'GET' | 'POST';
+export type RestRequestOptions = z.infer<typeof RestRequestOptionsSchema>;
+
+const HttpMethodSchema = z.enum(['GET', 'POST']);
+type HttpMethod = z.infer<typeof HttpMethodSchema>;
 
 export class LiveKitRestClient {
   private readonly baseUrl: string;

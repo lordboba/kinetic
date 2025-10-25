@@ -1,15 +1,20 @@
+import { z } from 'zod';
+
 import type { AvatarStyleOptions, SynthesizeAvatarSpeechResponse } from './tts-avatar.js';
-import { synthesizeAvatarSpeech } from './tts-avatar.js';
+import { AvatarStyleOptionsSchema, SynthesizeAvatarSpeechResponseSchema, synthesizeAvatarSpeech } from './tts-avatar.js';
 
-export type GenerateAvatarSpeechOptions = {
-  voice?: string;
-  format?: 'mp3' | 'wav' | 'ogg';
-  language?: string;
-  avatar?: AvatarStyleOptions;
-  metadata?: Record<string, unknown>;
-  endpointPath?: string;
-};
+export const GenerateAvatarSpeechOptionsSchema = z.object({
+  voice: z.string().optional(),
+  format: z.enum(['mp3', 'wav', 'ogg']).optional(),
+  language: z.string().optional(),
+  avatar: AvatarStyleOptionsSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  endpointPath: z.string().optional(),
+});
 
+export type GenerateAvatarSpeechOptions = z.infer<typeof GenerateAvatarSpeechOptionsSchema>;
+
+export const GenerateAvatarSpeechResultSchema = SynthesizeAvatarSpeechResponseSchema;
 export type GenerateAvatarSpeechResult = SynthesizeAvatarSpeechResponse;
 
 const DEFAULT_VOICE = process.env.LIVEKIT_DEFAULT_VOICE ?? 'alloy';

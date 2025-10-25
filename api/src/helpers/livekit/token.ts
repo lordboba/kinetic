@@ -1,15 +1,18 @@
 import { AccessToken } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 import { getLiveKitConfig, requireLiveKitSecret } from './config.js';
 
-export type LiveKitTokenOptions = {
-  identity?: string;
-  ttlSeconds?: number;
-  metadata?: string;
-  room?: string;
-  name?: string;
-};
+export const LiveKitTokenOptionsSchema = z.object({
+  identity: z.string().optional(),
+  ttlSeconds: z.number().optional(),
+  metadata: z.string().optional(),
+  room: z.string().optional(),
+  name: z.string().optional(),
+});
+
+export type LiveKitTokenOptions = z.infer<typeof LiveKitTokenOptionsSchema>;
 
 export async function createLiveKitAccessToken(options: LiveKitTokenOptions = {}): Promise<string> {
   const config = getLiveKitConfig();

@@ -1,32 +1,40 @@
+import { z } from 'zod';
+
 import { getLiveKitConfig } from './config.js';
 import { LiveKitRestClient } from './rest.js';
 
 const DEFAULT_TTS_PATH = '/v1/audio/tts';
 
-export type AvatarStyleOptions = {
-  avatarId?: string;
-  pose?: string;
-  camera?: string;
-};
+export const AvatarStyleOptionsSchema = z.object({
+  avatarId: z.string().optional(),
+  pose: z.string().optional(),
+  camera: z.string().optional(),
+});
 
-export type SynthesizeAvatarSpeechRequest = {
-  text: string;
-  voice: string;
-  format?: 'mp3' | 'wav' | 'ogg';
-  language?: string;
-  avatar?: AvatarStyleOptions;
-  metadata?: Record<string, unknown>;
-  endpointPath?: string;
-};
+export type AvatarStyleOptions = z.infer<typeof AvatarStyleOptionsSchema>;
 
-export type SynthesizeAvatarSpeechResponse = {
-  requestId: string;
-  audioUrl?: string;
-  avatarUrl?: string;
-  durationSeconds?: number;
-  approximateLatencyMs?: number;
-  transcript?: string;
-};
+export const SynthesizeAvatarSpeechRequestSchema = z.object({
+  text: z.string(),
+  voice: z.string(),
+  format: z.enum(['mp3', 'wav', 'ogg']).optional(),
+  language: z.string().optional(),
+  avatar: AvatarStyleOptionsSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  endpointPath: z.string().optional(),
+});
+
+export type SynthesizeAvatarSpeechRequest = z.infer<typeof SynthesizeAvatarSpeechRequestSchema>;
+
+export const SynthesizeAvatarSpeechResponseSchema = z.object({
+  requestId: z.string(),
+  audioUrl: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  durationSeconds: z.number().optional(),
+  approximateLatencyMs: z.number().optional(),
+  transcript: z.string().optional(),
+});
+
+export type SynthesizeAvatarSpeechResponse = z.infer<typeof SynthesizeAvatarSpeechResponseSchema>;
 
 export async function synthesizeAvatarSpeech(
   payload: SynthesizeAvatarSpeechRequest,

@@ -1,13 +1,16 @@
 import {config as loadEnv} from 'dotenv';
 import path from 'node:path';
 import { URL } from 'node:url';
+import { z } from 'zod';
 
-export type LiveKitConfig = {
-  websocketUrl: string;
-  apiKey: string;
-  apiSecret?: string;
-  requestTimeoutMs: number;
-};
+export const LiveKitConfigSchema = z.object({
+  websocketUrl: z.string(),
+  apiKey: z.string(),
+  apiSecret: z.string().optional(),
+  requestTimeoutMs: z.number(),
+});
+
+export type LiveKitConfig = z.infer<typeof LiveKitConfigSchema>;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
