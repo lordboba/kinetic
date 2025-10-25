@@ -51,6 +51,7 @@ type ResponseError = { success: boolean, error?: string }
 
 // REQUEST HELPERS //
 type QOption = { text: string; option_id: Uuid };
+// diff types of questions 
 type QStub<T> = T & { question: string; question_id: Uuid };
 type CreateLectureQuestion = QStub<
     | { question_type: "radio"; options: QOption[] }
@@ -60,6 +61,7 @@ type CreateLectureQuestion = QStub<
 
 type CreateLectureAnswer = {
     question_id: Uuid;
+    // both radio & checkbox have answer ID, text input is open-ended text
     question_answer: { question_type: "radio" | "checkbox", answer: Uuid } | { question_type: "text_input", answer: string };
 };
 
@@ -91,6 +93,7 @@ type CreateLectureMainRequest = {
 
 // 4. Backend responds by opeing a web socket (opening a lane)
 type CreateLectureMainResponse = {
+    // service will update client when a request finishes 
     /** status/heartbeat? */
 }
 
@@ -99,26 +102,27 @@ type UserInitiatedQuestionRequest = {
     user_id: Uuid;
     lecture_id: Uuid;
     lecture_version: number;
+    timestamp: number; // # secs into slide voicover
     slide: number;
-    timestamp: number; // #secs into slide voicover
-    cursor: number; // #words into slide voiceover
+    cursor: number; // # words into slide voiceover
     question: string;
 }
 
+// 2 diff lecture responses 
+// Case 1: no need for additional slides, too big of question prompt to start new lecture 
+// Case 2: only requires a few slide diff -> text + lecture 
 // Backend responds to question (mid-lecture)
-type BackendQuestionResponse = {
-    answer: string;
-    lecture: Lecture
-} & ResponseError;
-
+type BackendQuestionResponse =
+  ({ answer: string; lecture: Lecture } | { answer: string }) & ResponseError;
 
 // Backend requests check-in question (mid-lecture)
+// Take into account diff users access same lecture
 type BackendInitiatedQuestionRequest = {
     lecture_id: Uuid;
     lecture_version: number;
     slide: number;
     question: string;
-}
+} 
 
 // User responds to check-in question
 type UserQuestionResponse = {
