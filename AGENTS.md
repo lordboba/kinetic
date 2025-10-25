@@ -30,7 +30,7 @@ We let learners assemble their own lecture format by mixing content blocks (expl
 
 ### API Surface
 - `POST /api/newLecture { topic } → { id }` creates a lecture job and returns its identifier.
-- `WS /api/lecture?id={id}` streams progress updates (`transcript complete`, `slides complete`, `diagrams complete`, `voiceover complete`) as each asset becomes available.
+- `WS /api/lecture?id={id}` streams progress updates (`transcript complete`, `slides complete`, `diagrams complete`, `voiceover complete`) as each asset becomes available. This is the same input used to interrupt and ask questions during the lecture.
 - `GET /api/lecture?id={id}&asset={transcript|slide|voiceover|diagram}` fetches generated lecture artifacts once marked complete.
 
 ### Diagram Generation Strategies
@@ -40,3 +40,8 @@ We let learners assemble their own lecture format by mixing content blocks (expl
 
 ## Accessibility Impact
 Personalized pacing, modality options, and adaptive scaffolding help learners with different needs—including neurodiverse learners and those with limited access to traditional instruction—stay engaged and absorb material more effectively.
+
+## Conventions
+- Structured outputs should be used for LLM inputs and outputs.
+- Core logic should be a synthesis of a main thread loop that chains the results of many functions together.
+- For code cleanliness purposes, do not write functions that are way too long.
