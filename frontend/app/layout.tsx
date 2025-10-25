@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/auth-provider";
-import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
+import { ConditionalLayout } from "@/components/layout/conditional-layout";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,11 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-slate-50 antialiased`}
       >
         <AuthProvider>
-          <div className="flex min-h-screen flex-col">
-            <SiteHeader />
-            <main className="flex-1">{children}</main>
-            <SiteFooter />
-          </div>
+          <ConditionalLayout>{children}</ConditionalLayout>
         </AuthProvider>
       </body>
     </html>

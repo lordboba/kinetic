@@ -29,6 +29,8 @@ type LectureSlide = {
   image?: string; // url
 };
 
+type PartialSlide = Omit<LectureSlide,"transcript" | "voiceover">
+
 type Lecture = {
   lecture_id: Uuid;
   version: number; // race condition: account for case where user sends new request before prev finishes
