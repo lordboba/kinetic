@@ -214,16 +214,6 @@ export default function Home() {
             instruction stay engaged and absorb material more effectively.
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <p className="text-lg font-medium text-slate-900">
-            “Lecture Gen feels like having a professor and TA who already know
-            how I learn. I can read, listen, or watch at my pace—and jump back
-            in with questions anytime.”
-          </p>
-          <p className="mt-4 text-sm text-slate-500">
-            — Early pilot participant, Accessibility Lab
-          </p>
-        </div>
       </section>
 
       <section className="bg-slate-100 py-20">
@@ -236,12 +226,6 @@ export default function Home() {
             instructor + TA duo build the experience in real time.
           </p>
           <div className="flex flex-col gap-4 sm:flex-row">
-            <Link
-              href="/lectures"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-            >
-              Browse lecture templates
-            </Link>
             <Link
               href="/login"
               className="inline-flex items-center justify-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-400"
