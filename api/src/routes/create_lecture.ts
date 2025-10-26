@@ -384,9 +384,9 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       })
     );
 
-  // LiveKit image generation currently allows up to 5 concurrent streams.
+  // LiveKit image generation currently allows up to 20 concurrent streams.
   // Use a simple limiter to stay within the platform constraints.
-  const imageConcurrencyLimit = createLimiter(5);
+  const imageConcurrencyLimit = createLimiter(20);
 
   const imageTasks = ts
     .map((s, sidx) => ({ s, sidx }))
@@ -417,7 +417,12 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     );
 
   const voiceoverTasks = ts.map((s, sidx) =>
-    generateAvatarSpeech(s.transcript).then((speech) => {
+    generateAvatarSpeech(s.transcript, {
+      metadata: {
+        lectureId: lecture_id,
+        slideIndex: sidx,
+      },
+    }).then((speech) => {
       lec.slides![sidx].voiceover = speech.audioUrl;
       const currentCount = ++completedAudioCount;
       req.log.info({
