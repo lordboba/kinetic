@@ -21,3 +21,15 @@ export const CreateLectureUploadSchema = z.object({
   lecture_preferences: LecturePreferencesSchema.optional(),
   files: z.array(UploadedFileSchema).optional(),
 });
+
+// create a zod type out of
+// // REQUEST HELPERS //
+// type QOption = { text: string; option_id: Uuid };
+// // diff types of questions
+// type QStub<T> = T & { question: string; question_id: Uuid };
+// export type CreateLectureQuestion = QStub<
+//   | { question_type: "radio"; options: QOption[] }
+//   | { question_type: "checkbox"; options: QOption[] }
+//   | { question_type: "text_input" }
+// >;
+// export ZCreateLectureQuestion

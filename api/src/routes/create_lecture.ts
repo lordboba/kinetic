@@ -1,7 +1,14 @@
 import { RouteHandler } from "fastify";
 import { CreateLectureUploadSchema } from "schema/zod_types";
 import { buildFileUploadsForLLM } from "../helpers/file";
+import { ASSET_CACHE } from "../lib/file_cache";
 import * as z from "zod";
+import { create_lecture_stub } from "../lib/firebase_admin";
+import { CreateLectureInitialResponse } from "schema";
+import { generate_clarifying_questions } from "../helpers/claude/clarifying_questions";
+import { llm } from "../lib/mouse";
+import { WebsocketHandler } from "@fastify/websocket";
+import { generate_transcript } from "../helpers/claude/transcript";
 
 export const create_lecture_initial: RouteHandler = async (req, res) => {
   let lectureConfigRaw: unknown = undefined;
@@ -33,6 +40,7 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
         });
       } else {
         return res.code(400).send({
+          success: false,
           error: `Unexpected file field '${part.fieldname}'`,
         });
       }
@@ -63,11 +71,13 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
         // If the client *accidentally* sends a text field also named "files"
         // instead of a binary part, reject to keep the API strict.
         return res.code(400).send({
+          success: false,
           error:
             "Expected 'files' to be file upload(s), not text. Got text field.",
         });
       } else {
         return res.code(400).send({
+          success: false,
           error: `Unexpected field '${part.fieldname}'`,
         });
       }
@@ -77,6 +87,7 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
 
     // If we hit here, Fastify gave us something we didn't expect
     return res.code(400).send({
+      success: false,
       error: "Received multipart part of unknown type",
     });
   }
@@ -105,11 +116,40 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
   // data.lecture_preferences?.tone (enum or undefined)
   // data.files?.[i].file (Readable stream)
 
+  const { uid } = req.user!;
   const llmFiles = await buildFileUploadsForLLM(data.files);
+  const stub = await create_lecture_stub(uid, data.lecture_preferences);
+  ASSET_CACHE.set(stub, { uid, files: llmFiles });
+  const questions = await generate_clarifying_questions(llm, {
+    topic: data.lecture_config.lecture_topic,
+  });
 
   return res.code(200).send({
-    ok: true,
-    topic: data.lecture_config.lecture_topic,
-    num_files: data.files?.length ?? 0,
-  });
+    lecture_id: stub,
+    questions,
+    success: true,
+  } satisfies CreateLectureInitialResponse);
 };
+
+// export const create_lecture_main: WebsocketHandler = async (ws, req) => {
+//   const { lecture_id } = req.query as { lecture_id: string };
+//   const user = req.user!;
+
+//   const cachedFiles = ASSET_CACHE.get(lecture_id);
+//   if (!cachedFiles || cachedFiles.uid !== user.uid) {
+//     ws.send(
+//       JSON.stringify({
+//         success: false,
+//         error: "Lecture not found or forbidden",
+//       })
+//     );
+//     ws.close();
+//     return;
+//   }
+
+//   const
+
+//   const transcript = generate_transcript(llm, {
+//     questions:
+//   });
+// };

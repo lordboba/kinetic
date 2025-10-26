@@ -4,6 +4,13 @@ import Fastify from "fastify";
 
 import { LectureStore } from "./lib/lecture-store.js";
 import { registerRoutes } from "./routes/index.js";
+import { LLM } from "./helpers/claude/llm.js";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    llm: LLM;
+  }
+}
 
 const lectureStore = new LectureStore();
 

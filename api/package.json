@@ -20,6 +20,7 @@
     "dotenv": "^17.2.3",
     "fastify": "^4.26.2",
     "fastify-type-provider-zod": "^6.1.0",
+    "firebase-admin": "^13.5.0",
     "google-images": "^2.1.0",
     "jszip": "^3.10.1",
     "livekit-server-sdk": "^2.14.0",

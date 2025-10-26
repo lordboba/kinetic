@@ -16,10 +16,14 @@ export type GenerateTranscriptRequest = {
   custom_preferences?: LecturePreferences;
 };
 
-// validates AI's response structure 
+// validates AI's response structure
 export const ZGenerateTranscriptResponse = z.array(
   z.object({
     transcript: z.string(),
+    slide: z.object({
+      title: z.string(),
+      markdown_body: z.string(),
+    }),
     question: z.optional(
       z.object({
         question_text: z.string(),
@@ -51,7 +55,7 @@ export const ZGenerateTranscriptResponse = z.array(
   })
 );
 
-// converts Q&A pairs into readable text format 
+// converts Q&A pairs into readable text format
 const question_answer_to_text = (
   question: CreateLectureQuestion,
   answer: CreateLectureAnswer
@@ -107,11 +111,15 @@ You have also been given the following context. Please reference this context to
 ${file_uploads.map((u) => `**${u.name}**\n${u.content}`)}
 
 Please generate a response as follows:
-Each object in the returned array will represent a single **slide** in a lecture-style presentation. The \`transcript\` field corresponds to the spoken narration or written content that would appear on that slide. Optional \`image\`, \`diagram\`, and \`question\` fields should be used only when they enhance the educational value of that specific slide. The goal is to produce a structured lecture that could be seamlessly rendered into a sequence of slides, each containing its own transcript (and optionally a visual or question) as teaching material.
+Each object in the returned array will represent a single **slide** in a lecture-style presentation. The \`transcript\` field corresponds to the spoken narration or written content that would appear on that slide. The \`slide\` field should contain a \`title\` field with the slide title, and a \`body\` field with Markdown content that should be shown. It should be a summarized subset of the \`transcript\` in bullet-point or short-text format. Optional \`image\`, \`diagram\`, and \`question\` fields should be used only when they enhance the educational value of that specific slide. The goal is to produce a structured lecture that could be seamlessly rendered into a sequence of slides, each containing its own transcript (and optionally a visual or question) as teaching material.
 
 Return a JSON array. Each element of the array must be an object with the following structure:
 {
   "transcript": string, // REQUIRED, plain text transcript for this segment
+  "slide": { // REQUIRED
+    "title": string, // REQUIRED slide title
+    "content": string // REQUIRED slide Markdown content; 4-6 lines of bullet points or short text.
+  }
   "question": {
     "question_text": string, // REQUIRED if question is present; the question you want the learner to answer
     "suggested_answer": string // REQUIRED if question is present; the correct/expected answer
@@ -128,6 +136,7 @@ Return a JSON array. Each element of the array must be an object with the follow
 
 Please adhere to the following guidelines:
 - \`transcript\` is **always required**.
+- \`slides\` and its subfields are **always required**.
 - \`question\` is **optional**. Include it only if this part of the transcript naturally invites an in-lecture check-for-understanding. If included, it must contain both \`question_text\` and \`suggested_answer\`.
 - Either \`image\` **or** \`diagram\` may be included for each transcript segment — never both. It is also acceptable for a segment to include neither if a visual aid would not add clarity.
 - \`image\` is **optional**, but if included it must contain both \`search_term\` and \`extended_description\`.
@@ -149,8 +158,7 @@ Please adhere to the following guidelines:
 
 Adjust your response according to the current lecture preferences:
 
-- Lecture length is set to "${effective_preferences.lecture_length}".  
-  Generate approximately ${
+- Lecture length is set to "${effective_preferences.lecture_length}", so you should generate approximately ${
     effective_preferences.lecture_length === "short"
       ? "3–5"
       : effective_preferences.lecture_length === "medium"
