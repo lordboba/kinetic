@@ -47,10 +47,10 @@ export function PreferencesModal({
             </svg>
           </div>
           <h2 className="text-3xl font-bold text-slate-900">
-            Welcome to Lecture Gen Studio!
+            Hello there!
           </h2>
           <p className="mt-3 text-lg text-slate-600">
-            Let's customize your lecture preferences
+            Let's customize your lecture preferences...
           </p>
         </div>
 

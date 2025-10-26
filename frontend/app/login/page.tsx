@@ -86,7 +86,7 @@ export default function LoginPage() {
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-primary via-primary to-accent">
       <div className="flex w-full max-w-lg flex-col gap-10 px-6">
         <div className="space-y-4 text-center">
-          <h1 className="text-3xl font-semibold text-white">
+          <h1 className="text-5xl font-bold text-white">
             {mode === "login" ? "Welcome Back!" : "Create your learning profile"}
           </h1>
         </div>
@@ -137,7 +137,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center rounded-full bg-primary-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 active:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex w-full items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 active:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {submitting
               ? "Working on it…"
@@ -172,7 +172,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={() => setMode(mode === "login" ? "register" : "login")}
-          className="font-semibold text-primary-700 underline-offset-4 transition hover:underline hover:text-primary-800"
+          className="font-semibold text-white underline-offset-4 transition hover:underline hover:text-primary-800"
         >
           {mode === "login"
             ? "Need an account? Create one."

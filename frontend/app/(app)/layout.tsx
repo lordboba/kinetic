@@ -93,7 +93,7 @@ export default function WorkspaceLayout({
         },
         body: JSON.stringify({
           email: user.email || "",
-          displayName: user.displayName,
+          displayName: user.displayName || "",
           preferences,
         }),
       });
@@ -120,11 +120,17 @@ export default function WorkspaceLayout({
   };
 
   const handleOnboardingSkip = async () => {
-    if (!user) return;
+    if (!user) {
+      console.error("[DEBUG] No user found - cannot skip onboarding");
+      return;
+    }
 
     try {
       const token = await getIdToken();
       console.log("[DEBUG] Skipping onboarding - creating profile with defaults");
+      console.log("[DEBUG] User email:", user.email);
+      console.log("[DEBUG] User displayName:", user.displayName);
+
       // Create profile with defaults
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/profile`, {
         method: "POST",
@@ -152,9 +158,15 @@ export default function WorkspaceLayout({
       } else {
         const errorText = await response.text();
         console.error("[DEBUG] Failed to create profile (skip):", response.status, errorText);
+        // Close modal anyway to prevent it from being stuck
+        alert(`Failed to save profile: ${errorText}. Please try again from settings.`);
+        setShowOnboarding(false);
       }
     } catch (error) {
       console.error("[DEBUG] Error creating profile (skip):", error);
+      // Close modal anyway to prevent it from being stuck
+      alert("An error occurred while saving your profile. Please try again from settings.");
+      setShowOnboarding(false);
     }
   };
 
