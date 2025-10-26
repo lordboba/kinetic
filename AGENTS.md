@@ -41,10 +41,9 @@ We let learners assemble their own lecture format by mixing content blocks (expl
 - `GET /api/lecture`  
   - HTTP: returns 501 (placeholder until lecture asset retrieval is implemented).  
   - WebSocket: immediately closes with code `1011` (stream handler not wired up yet).
-
-> TODO endpoints (not yet implemented in the codebase):  
-> • `POST /api/newLecture` — Creates a new lecture item and begins with clarifying questions before generation continues.  
-> • WebSocket progress streaming + asset retrieval once the lecture orchestration loop lands.
+- `GET /api/watch_lecture`  
+  - HTTP: returns 426 (upgrade required).  
+  - WebSocket: requires an initial `get_lecture_request` message, streams the lecture snapshot, and handles follow-up `user_question_request` prompts with AI-generated responses.
 
 ### Diagram Generation Strategies
 - Web search via Google Images for illustrative references.
