@@ -49,7 +49,20 @@ export class LLM {
     });
 
     const contentBlock = response.content.find((c) => c.type === "tool_use");
-    const result = schema.safeParse(contentBlock?.input);
+
+    if (!contentBlock) {
+      throw new Error("LLM response did not contain a tool_use block");
+    }
+
+    const result = schema.safeParse(contentBlock.input);
+
+    if (!result.success) {
+      throw new Error(
+        "LLM response failed schema validation: " +
+        JSON.stringify(z.treeifyError(result.error), null, 2)
+      );
+    }
+
     return result.data as z.infer<T>;
   }
 

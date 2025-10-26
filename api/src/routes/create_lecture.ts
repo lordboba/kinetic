@@ -293,23 +293,56 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     "[LectureGen] Starting transcript generation"
   );
 
-  const ts = await generate_transcript(
-    llm,
-    {
-      ...cached,
-      answers,
-    },
-    augment_slides_instructions
-  );
+  let ts;
+  try {
+    ts = await generate_transcript(
+      llm,
+      {
+        ...cached,
+        answers,
+      },
+      augment_slides_instructions
+    );
 
-  req.log.info(
-    {
-      lecture_id,
-      slide_count: ts.length,
-      timestamp: new Date().toISOString(),
-    },
-    "[LectureGen] Transcript generation completed"
-  );
+    if (!ts || ts.length === 0) {
+      throw new Error("Transcript generation returned empty or invalid slides");
+    }
+
+    req.log.info(
+      {
+        lecture_id,
+        slide_count: ts.length,
+        timestamp: new Date().toISOString(),
+      },
+      "[LectureGen] Transcript generation completed"
+    );
+  } catch (error) {
+    req.log.error(
+      {
+        lecture_id,
+        user_id: user.uid,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      "[LectureGen] Transcript generation failed - cache preserved for retry"
+    );
+
+    // Keep the cache entry so user can retry
+    // ASSET_CACHE is NOT deleted here - it remains for retry
+
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: "transcript_generation_failed",
+        message: error instanceof Error ? error.message : "Failed to generate lecture transcript",
+        lecture_id,
+        can_retry: true,
+        details: "Your questionnaire responses have been saved. You can retry generating the lecture.",
+      })
+    );
+    ws.close();
+    return;
+  }
 
   ws.send(
     JSON.stringify({
