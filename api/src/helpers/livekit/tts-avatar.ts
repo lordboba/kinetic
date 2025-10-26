@@ -121,6 +121,7 @@ export async function synthesizeAvatarSpeech(
 
       chunkCount++;
       // eslint-disable-next-line no-console
+      /*
       console.log(`[TTS] Chunk #${chunkCount}:`, {
         requestId: chunk.requestId,
         deltaText: chunk.deltaText,
@@ -128,7 +129,7 @@ export async function synthesizeAvatarSpeech(
         frameSampleRate: chunk.frame?.sampleRate,
         frameChannels: chunk.frame?.channels,
         frameSamplesPerChannel: chunk.frame?.samplesPerChannel,
-      });
+      });*/
 
       requestId = chunk.requestId ?? requestId;
       transcript += chunk.deltaText ?? '';
