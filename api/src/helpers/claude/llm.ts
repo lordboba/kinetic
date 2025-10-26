@@ -11,6 +11,12 @@ export class LLM {
   private maxTokens: number;
 
   constructor(apiKey: string, model = "claude-sonnet-4-5", maxTokens = 4096) {
+    if (!apiKey || apiKey.trim().length === 0) {
+      throw new Error(
+        "Anthropic API key is missing. Set ANTHROPIC_API_KEY in the environment.",
+      );
+    }
+
     this.client = new Anthropic({ apiKey });
     this.model = model;
     this.maxTokens = maxTokens;

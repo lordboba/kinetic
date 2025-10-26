@@ -1,3 +1,5 @@
 import { LLM } from "../helpers/claude/llm";
 
-export const llm = new LLM("Mouse key");
+const anthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
+
+export const llm = new LLM(anthropicKey);
