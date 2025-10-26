@@ -15,7 +15,7 @@ export class LLM {
   private model: string;
   private maxTokens: number;
 
-  constructor(apiKey: string, model = "claude-sonnet-4-5", maxTokens = 4096) {
+  constructor(apiKey: string, model = "claude-sonnet-4-5", maxTokens = 8092) {
     if (!apiKey || apiKey.trim().length === 0) {
       throw new Error(
         "Anthropic API key is missing. Set ANTHROPIC_API_KEY in the environment."
@@ -59,7 +59,7 @@ export class LLM {
     if (!result.success) {
       throw new Error(
         "LLM response failed schema validation: " +
-        JSON.stringify(z.treeifyError(result.error), null, 2)
+          JSON.stringify(z.treeifyError(result.error), null, 2)
       );
     }
 

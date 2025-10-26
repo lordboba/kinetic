@@ -156,10 +156,10 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
         return;
       }
 
-      // Get user preferences from lecture or use defaults
-      const userPreferences = lectureData.preferences || {
-        lecture_length: "medium",
-        tone: "warm",
+      // Use default preferences for regeneration
+      const userPreferences = {
+        lecture_length: "medium" as const,
+        tone: "warm" as const,
         enable_questions: true,
       };
 
@@ -188,7 +188,9 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
           type: "user_question_response",
           response: {
             answer_category: "simple",
-            response: result.response + " (Note: Attempted to regenerate slides but encountered an error. Please ask your question again or try rephrasing it.)",
+            response:
+              result.response +
+              " (Note: Attempted to regenerate slides but encountered an error. Please ask your question again or try rephrasing it.)",
           },
         } satisfies UserQuestionResponse);
         return;
@@ -221,8 +223,12 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
       );
 
       // Generate assets for new slides (images, diagrams, TTS)
-      const imageCount = newSlideData.filter((s) => s.image !== undefined).length;
-      const diagramCount = newSlideData.filter((s) => s.diagram !== undefined).length;
+      const imageCount = newSlideData.filter(
+        (s) => s.image !== undefined
+      ).length;
+      const diagramCount = newSlideData.filter(
+        (s) => s.diagram !== undefined
+      ).length;
 
       // Generate diagrams
       const diagramTasks = newSlideData
@@ -266,6 +272,7 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
       // Generate voiceovers
       const voiceoverTasks = newSlideData.map((s, sidx) =>
         generateAvatarSpeech(s.transcript, {
+          format: "wav",
           metadata: {
             lectureId: msg.lecture_id,
             slideIndex: msg.current_slide + 1 + sidx,
