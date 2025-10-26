@@ -1,173 +1,212 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Slide } from '@/components/slides/Slide';
 import { useSearchParams } from 'next/navigation';
 import { getBackendEndpoint } from '@/lib/env';
-import type { Lecture, LectureSlide } from 'schema';
+import type { LectureSlide, Lecture } from 'schema';
+import {
+  ZGetLectureRequest,
+  ZGetLectureResponse,
+  ZUserQuestionRequest,
+  ZUserQuestionResponse,
+  ZBackendQuestionRequest,
+  ZOutboundMessage,
+  type GetLectureResponse,
+  type UserQuestionResponse,
+  type BackendQuestionRequest,
+} from 'schema/zod_types';
+
+type ClientPhase = 'disconnected' | 'connecting' | 'awaiting_lecture' | 'ready';
+
+interface UseLectureChannelReturn {
+  phase: ClientPhase;
+  lecture: GetLectureResponse['lecture'] | null;
+  lastAnswer: UserQuestionResponse | null;
+  lastBackendQuestion: BackendQuestionRequest | null;
+  askQuestion: (slide: number, question: string) => void;
+}
+
+function useLectureChannel(lectureId: string): UseLectureChannelReturn {
+  const [phase, setPhase] = useState<ClientPhase>('disconnected');
+  const [lecture, setLecture] = useState<GetLectureResponse['lecture'] | null>(null);
+  const [lastAnswer, setLastAnswer] = useState<UserQuestionResponse | null>(null);
+  const [lastBackendQuestion, setLastBackendQuestion] = useState<BackendQuestionRequest | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    // Construct WebSocket URL
+    const backendEndpoint = getBackendEndpoint();
+    const wsEndpoint = backendEndpoint
+      .replace('http://', 'ws://')
+      .replace('https://', 'wss://')
+      .replace(/\/$/, '');
+
+    const wsUrl = `${wsEndpoint}/watch_lecture`;
+
+    console.log('[useLectureChannel] Connecting to:', wsUrl);
+
+    // Create WebSocket and move to connecting
+    setPhase('connecting');
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('[useLectureChannel] WebSocket opened');
+
+      // Construct and validate init message
+      const initMessage = {
+        type: 'get_lecture_request' as const,
+        lecture_id: lectureId,
+      };
+
+      const validationResult = ZGetLectureRequest.safeParse(initMessage);
+      if (!validationResult.success) {
+        console.error('[useLectureChannel] Failed to construct valid GetLectureRequest:', validationResult.error);
+        ws.close();
+        setPhase('disconnected');
+        return;
+      }
+
+      // Send init message
+      console.log('[useLectureChannel] Sending init message:', validationResult.data);
+      ws.send(JSON.stringify(validationResult.data));
+      setPhase('awaiting_lecture');
+    };
+
+    ws.onmessage = (event) => {
+      console.log('[useLectureChannel] Message received:', event.data);
+
+      try {
+        const parsed = JSON.parse(event.data);
+        const validationResult = ZOutboundMessage.safeParse(parsed);
+
+        if (!validationResult.success) {
+          console.error('[useLectureChannel] Received invalid message from server:', validationResult.error);
+          return;
+        }
+
+        const message = validationResult.data;
+        console.log('[useLectureChannel] Valid message type:', message.type);
+
+        switch (message.type) {
+          case 'get_lecture_response': {
+            const lectureValidation = ZGetLectureResponse.safeParse(message);
+            if (!lectureValidation.success) {
+              console.error('[useLectureChannel] Invalid get_lecture_response:', lectureValidation.error);
+              return;
+            }
+            console.log('[useLectureChannel] Lecture received, transitioning to ready');
+            setLecture(lectureValidation.data.lecture);
+            setPhase('ready');
+            break;
+          }
+
+          case 'user_question_response': {
+            const answerValidation = ZUserQuestionResponse.safeParse(message);
+            if (!answerValidation.success) {
+              console.error('[useLectureChannel] Invalid user_question_response:', answerValidation.error);
+              return;
+            }
+            console.log('[useLectureChannel] User question response received');
+            setLastAnswer(answerValidation.data);
+            break;
+          }
+
+          case 'backend_question': {
+            const backendQuestionValidation = ZBackendQuestionRequest.safeParse(message);
+            if (!backendQuestionValidation.success) {
+              console.error('[useLectureChannel] Invalid backend_question:', backendQuestionValidation.error);
+              return;
+            }
+            console.log('[useLectureChannel] Backend question received');
+            setLastBackendQuestion(backendQuestionValidation.data);
+            break;
+          }
+        }
+      } catch (error) {
+        console.error('[useLectureChannel] Failed to parse message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[useLectureChannel] WebSocket error:', error);
+      setPhase('disconnected');
+    };
+
+    ws.onclose = () => {
+      console.log('[useLectureChannel] WebSocket closed');
+      setPhase('disconnected');
+    };
+
+    // Cleanup on unmount
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [lectureId]);
+
+  const askQuestion = (slide: number, question: string) => {
+    // Only send if ready and socket is open
+    if (phase !== 'ready') {
+      console.warn('[useLectureChannel] Cannot ask question: phase is not ready');
+      return;
+    }
+
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      console.warn('[useLectureChannel] Cannot ask question: WebSocket not open');
+      return;
+    }
+
+    // Construct and validate user question
+    const questionMessage = {
+      type: 'user_question_request' as const,
+      lecture_id: lectureId,
+      slide,
+      question,
+    };
+
+    const validationResult = ZUserQuestionRequest.safeParse(questionMessage);
+    if (!validationResult.success) {
+      console.error('[useLectureChannel] Failed to construct valid UserQuestionRequest:', validationResult.error);
+      return;
+    }
+
+    // Send question
+    console.log('[useLectureChannel] Sending user question:', validationResult.data);
+    wsRef.current.send(JSON.stringify(validationResult.data));
+  };
+
+  return {
+    phase,
+    lecture,
+    lastAnswer,
+    lastBackendQuestion,
+    askQuestion,
+  };
+}
 
 export default function MDXTestPage() {
   const searchParams = useSearchParams();
   const lectureId = searchParams.get('id');
 
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [lecture, setLecture] = useState<Lecture | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [questionText, setQuestionText] = useState('');
 
-  // open websocket #2 connection to fetch lecture
-  useEffect(() => {
-    console.log('[WS2-Client] useEffect triggered', { lectureId });
+  // Use the new state machine hook
+  const { phase, lecture, lastAnswer, lastBackendQuestion, askQuestion } =
+    useLectureChannel(lectureId || '');
 
-    if (!lectureId) {
-      console.warn('[WS2-Client] No lecture ID provided in URL');
-      setError('No lecture ID provided. Add ?id=your-lecture-id to the URL.');
-      setLoading(false);
-      return;
-    }
-
-    let ws: WebSocket | null = null;
-
-    const connectWebSocket = () => {
-      try {
-        const backendEndpoint = getBackendEndpoint();
-        console.log('[WS2-Client] Backend endpoint:', backendEndpoint);
-
-        // convert HTTP endpoint to WebSocket endpoint
-        // backendEndpoint is already http://localhost:4000/api/
-        const wsEndpoint = backendEndpoint
-          .replace('http://', 'ws://')
-          .replace('https://', 'wss://')
-          .replace(/\/$/, ''); // Remove trailing slash
-
-        // Don't add /api/ again since backendEndpoint already includes it
-        const wsUrl = `${wsEndpoint}/lecture?lecture_id=${lectureId}`;
-
-        console.log('[WS2-Client] Connecting to WebSocket:', {
-          originalEndpoint: backendEndpoint,
-          wsEndpoint,
-          fullUrl: wsUrl,
-          lectureId
-        });
-
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          console.log('[WS2-Client] WebSocket connection opened successfully', {
-            readyState: ws?.readyState,
-            url: wsUrl
-          });
-        };
-
-        ws.onmessage = (event) => {
-          console.log('[WS2-Client] Message received from server', {
-            dataType: typeof event.data,
-            dataLength: event.data.length,
-            rawData: event.data.substring(0, 200) + '...' // First 200 chars
-          });
-
-          try {
-            const response = JSON.parse(event.data) as {
-              success: boolean;
-              lecture?: Lecture;
-              error?: string;
-            };
-
-            console.log('[WS2-Client] Parsed response:', {
-              success: response.success,
-              hasLecture: !!response.lecture,
-              error: response.error,
-              slideCount: response.lecture?.slides?.length
-            });
-
-            if (!response.success) {
-              console.error('[WS2-Client] Server returned error:', response.error);
-              setError(response.error || 'Failed to fetch lecture');
-              setLoading(false);
-              return;
-            }
-
-            if (response.lecture) {
-              console.log('[WS2-Client] Lecture received successfully:', {
-                version: response.lecture.version,
-                slideCount: response.lecture.slides?.length,
-                permittedUsers: response.lecture.permitted_users,
-                slides: response.lecture.slides?.map((slide: LectureSlide, idx: number) => ({
-                  index: idx,
-                  title: slide.title,
-                  hasContent: !!slide.content,
-                  hasDiagram: !!slide.diagram,
-                  hasImage: !!slide.image,
-                  hasVoiceover: !!slide.audio_transcription_link,
-                  hasQuestion: !!slide.question,
-                  contentLength: slide.content?.length || 0,
-                  transcriptLength: slide.transcript?.length || 0
-                }))
-              });
-
-              setLecture(response.lecture);
-              setLoading(false);
-              setError(null);
-              console.log('[WS2-Client] State updated - lecture set, loading complete');
-            } else {
-              console.warn('[WS2-Client] Success response but no lecture data');
-            }
-          } catch (err) {
-            console.error('[WS2-Client] Error parsing WebSocket message:', {
-              error: err,
-              message: err instanceof Error ? err.message : 'Unknown error',
-              stack: err instanceof Error ? err.stack : undefined,
-              rawData: event.data
-            });
-            setError('Failed to parse lecture data');
-            setLoading(false);
-          }
-        };
-
-        ws.onerror = (event) => {
-          console.error('[WS2-Client] WebSocket error occurred:', {
-            event,
-            readyState: ws?.readyState,
-            url: wsUrl,
-            type: event.type
-          });
-          setError('WebSocket connection error. Check console for details.');
-          setLoading(false);
-        };
-
-        ws.onclose = (event) => {
-          console.log('[WS2-Client] WebSocket connection closed:', {
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean,
-            url: wsUrl
-          });
-        };
-      } catch (err) {
-        console.error('[WS2-Client] Error setting up WebSocket:', {
-          error: err,
-          message: err instanceof Error ? err.message : 'Unknown error',
-          stack: err instanceof Error ? err.stack : undefined
-        });
-        setError(err instanceof Error ? err.message : 'Failed to connect to WebSocket');
-        setLoading(false);
-      }
-    };
-
-    connectWebSocket();
-
-    // cleanup on unmount
-    return () => {
-      console.log('[WS2-Client] Cleaning up WebSocket connection');
-      if (ws) {
-        console.log('[WS2-Client] Closing WebSocket on unmount', {
-          readyState: ws.readyState
-        });
-        ws.close();
-      }
-    };
-  }, [lectureId]);
+  // Derive loading and error states from phase
+  const loading = phase === 'connecting' || phase === 'awaiting_lecture';
+  const error = !lectureId
+    ? 'No lecture ID provided. Add ?id=your-lecture-id to the URL.'
+    : phase === 'disconnected' && !lecture
+    ? 'Failed to connect to server. Please try again.'
+    : null;
 
   // keyboard navigation
   useEffect(() => {
@@ -249,6 +288,13 @@ export default function MDXTestPage() {
     );
   }
 
+  const handleAskQuestion = () => {
+    if (questionText.trim() && phase === 'ready') {
+      askQuestion(currentSlide, questionText);
+      setQuestionText('');
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Slide Display - Takes remaining space */}
@@ -262,7 +308,88 @@ export default function MDXTestPage() {
         >
           <span>🎬</span> Open Presentation Mode
         </button>
+
+        {/* Connection Status Indicator - Floating */}
+        <div className="absolute top-4 left-4 px-3 py-1.5 bg-white rounded-lg shadow-lg text-xs font-medium flex items-center gap-2">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              phase === 'ready'
+                ? 'bg-green-500'
+                : phase === 'disconnected'
+                ? 'bg-red-500'
+                : 'bg-yellow-500 animate-pulse'
+            }`}
+          />
+          <span className="text-gray-700">
+            {phase === 'ready'
+              ? 'Connected'
+              : phase === 'disconnected'
+              ? 'Disconnected'
+              : phase === 'connecting'
+              ? 'Connecting...'
+              : 'Loading lecture...'}
+          </span>
+        </div>
       </div>
+
+      {/* Question/Answer Panel - Conditionally rendered */}
+      {(lastAnswer || lastBackendQuestion) && (
+        <div className="bg-white border-t border-gray-300 p-4 max-h-48 overflow-y-auto">
+          {/* Last Answer from User Question */}
+          {lastAnswer && (
+            <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <h4 className="font-semibold text-green-900 text-sm mb-1">Answer:</h4>
+              <p className="text-green-800 text-sm">{lastAnswer.answer}</p>
+              {lastAnswer.partial_lecture && (
+                <p className="text-xs text-green-600 mt-2">
+                  Lecture updated from slide {lastAnswer.partial_lecture.from_slide + 1}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Backend Question */}
+          {lastBackendQuestion && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-semibold text-blue-900 text-sm mb-1">
+                Check-in Question (Slide {lastBackendQuestion.current_slide + 1}):
+              </h4>
+              <p className="text-blue-800 text-sm mb-2">{lastBackendQuestion.question}</p>
+              <p className="text-xs text-blue-600">
+                <strong>Your answer:</strong> {lastBackendQuestion.answer}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Question Input - Fixed above navigation */}
+      {phase === 'ready' && (
+        <div className="bg-gray-100 border-t border-gray-300 p-3">
+          <div className="max-w-6xl mx-auto flex items-center gap-2">
+            <input
+              type="text"
+              value={questionText}
+              onChange={(e) => setQuestionText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAskQuestion();
+                }
+              }}
+              placeholder={`Ask a question about slide ${currentSlide + 1}...`}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              disabled={phase !== 'ready'}
+            />
+            <button
+              onClick={handleAskQuestion}
+              disabled={!questionText.trim() || phase !== 'ready'}
+              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            >
+              Ask
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Controls - Fixed height at bottom */}
       <div className="bg-gray-800 text-white p-4 shadow-lg">
@@ -314,7 +441,6 @@ export default function MDXTestPage() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }
