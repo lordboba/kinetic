@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { CreateLectureQuestion } from "schema";
+import type { CreateLectureQuestion, CreateLectureStatusUpdate, CreateLectureAnswer } from "schema";
+import { useAuth } from "@/components/auth/auth-provider";
 
 type JobStatus =
   | "idle"
-  | "starting"
+  // | "starting"
   | "connecting"
   | "connected"
   | "error";
@@ -82,38 +83,44 @@ export default function LectureProgressPage() {
     const startLectureJob = async () => {
       setStatus("starting");
       try {
-        const response = await fetch("/api/newLecture", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lectureStubId: parsedConfig?.lectureStubId,
-            topic:
-              parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
-            baseAnswers: parsedConfig?.baseAnswers,
-            clarifyingAnswers: parsedConfig?.clarifyingAnswers,
-            clarifyingQuestions: parsedConfig?.clarifyingQuestions,
-          }),
-        });
+        // const response = await fetch("/api/newLecture", {
+        //   method: "POST",
+        //   headers: { "Content-Type": "application/json" },
+        //   body: JSON.stringify({
+        //     lectureStubId: parsedConfig?.lectureStubId,
+        //     topic:
+        //       parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
+        //     baseAnswers: parsedConfig?.baseAnswers,
+        //     clarifyingAnswers: parsedConfig?.clarifyingAnswers,
+        //     clarifyingQuestions: parsedConfig?.clarifyingQuestions,
+        //   }),
+        // });
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to create lecture job (${response.statusText})`,
-          );
-        }
+        // if (!response.ok) {
+        //   throw new Error(
+        //     `Failed to create lecture job (${response.statusText})`,
+        //   );
+        // }
 
-        const payload = (await response.json()) as { id?: string };
-        const jobId = payload?.id;
+        // const payload = (await response.json()) as { id?: string };
+        // const jobId = payload?.id;
 
-        if (!jobId) {
-          throw new Error("Lecture job missing identifier.");
-        }
+        // if (!jobId) {
+        //   throw new Error("Lecture job missing identifier.");
+        // }
 
-        setLectureId(jobId);
-        setStatus("connecting");
+        // setLectureId(jobId);
+        // setStatus("connecting");
+
+        topic:
+          parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
+        baseAnswers: parsedConfig?.baseAnswers,
+        clarifyingAnswers: parsedConfig?.clarifyingAnswers,
+        clarifyingQuestions: parsedConfig?.clarifyingQuestions,
 
         const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-        const socketUrl = `${protocol}://${window.location.host}/api/lecture?id=${jobId}`;
-
+        // const socketUrl = `${protocol}://${window.location.host}/api/lecture?id=${jobId}`;
+        const socketUrl = `${protocol}://${window.location.host}/api/lecture?lecture_id=${lectureId}&answers=${encodeURIComponent(JSON.stringify(answersArray))}`;
         socket = new WebSocket(socketUrl);
         socket.onopen = () => setStatus("connected");
         socket.onmessage = (event) =>
