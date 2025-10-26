@@ -8,6 +8,11 @@ import { LectureStore } from "../lib/lecture-store.js";
 import type { WebsocketHandler } from "@fastify/websocket";
 import { create_lecture_initial } from "./create_lecture.js";
 import { verify_firebase_token } from "../middleware/firebase.js";
+import {
+  get_profile_handler,
+  update_preferences_handler,
+  create_profile_handler,
+} from "./user_profile.js";
 
 const createLectureAssetHandler = (
   _lectureStore: LectureStore,
@@ -81,6 +86,22 @@ export function registerRoutes(
   app.post("/api/create-lecture-initial", {
     preHandler: verify_firebase_token,
     handler: create_lecture_initial,
+  });
+
+  // User profile routes
+  app.get("/api/users/profile", {
+    preHandler: verify_firebase_token,
+    handler: get_profile_handler,
+  });
+
+  app.put("/api/users/profile/preferences", {
+    preHandler: verify_firebase_token,
+    handler: update_preferences_handler,
+  });
+
+  app.post("/api/users/profile", {
+    preHandler: verify_firebase_token,
+    handler: create_profile_handler,
   });
 
   app.route({

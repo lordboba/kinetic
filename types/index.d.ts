@@ -20,6 +20,15 @@ type LecturePreferences = {
   //   reference_youtuber: "3Blue1Brown" | "Crash Course" | "Veritasium";
 };
 
+type UserProfile = {
+  uid: string;
+  email: string;
+  displayName?: string;
+  preferences: LecturePreferences;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type LectureSlide = {
   transcript: string;
   voiceover: string; // download URL; refers to audio in firebase/storage

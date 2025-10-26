@@ -6,7 +6,7 @@ import {
 import { buildFileUploadsForLLM } from "../helpers/file";
 import { ASSET_CACHE } from "../lib/file_cache";
 import * as z from "zod";
-import { create_lecture_stub } from "../lib/firebase_admin";
+import { create_lecture_stub, get_user_profile } from "../lib/firebase_admin";
 import { CreateLectureInitialResponse, LecturePreferences } from "schema";
 import {
   ZGenerateClarifyingQuestionsRequest,
@@ -159,8 +159,13 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
 
   const { uid } = user;
   const llmFiles = await buildFileUploadsForLLM(data.files);
-  const userPreferences =
-    data.lecture_preferences ?? DEFAULT_LECTURE_PREFERENCES;
+
+  // Fetch user profile to get saved preferences
+  const userProfile = await get_user_profile(uid);
+  const savedPreferences = userProfile?.preferences ?? DEFAULT_LECTURE_PREFERENCES;
+
+  // Use lecture-specific preferences if provided, otherwise use saved/default preferences
+  const userPreferences = data.lecture_preferences ?? savedPreferences;
 
   const clarifyingRequest = ZGenerateClarifyingQuestionsRequest.parse({
     topic: data.lecture_config.lecture_topic,

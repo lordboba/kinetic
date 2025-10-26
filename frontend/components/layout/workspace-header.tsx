@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 
 const workspaceLinks = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function WorkspaceHeader() {

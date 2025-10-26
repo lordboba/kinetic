@@ -8,7 +8,7 @@ import {
 } from "firebase-admin/firestore";
 import fs from "node:fs";
 import path from "node:path";
-import { Lecture, LecturePreferences } from "schema";
+import { Lecture, LecturePreferences, UserProfile } from "schema";
 
 const serviceAccountPath =
   process.env.FIREBASE_SERVICE_ACCOUNT_PATH ??
@@ -76,6 +76,56 @@ export async function create_lecture_stub(
 export async function create_lecture_entry(lecture: Lecture) {
   // TypeScript enforces `lecture` matches the Lecture type here.
   await lecturesCollection.add(lecture);
+}
+
+// User profile helpers
+export const userProfilesCollection = typedCollection<UserProfile>("user_profiles");
+export function userProfileDoc(uid: string) {
+  return typedDoc<UserProfile>(`user_profiles/${uid}`);
+}
+
+export async function get_user_profile(uid: string): Promise<UserProfile | null> {
+  const docSnap = await userProfileDoc(uid).get();
+  if (!docSnap.exists) {
+    return null;
+  }
+  return docSnap.data() ?? null;
+}
+
+export async function create_user_profile(
+  uid: string,
+  email: string,
+  displayName?: string,
+  preferences?: LecturePreferences
+): Promise<UserProfile> {
+  const defaultPreferences: LecturePreferences = preferences ?? {
+    lecture_length: "medium",
+    tone: "warm",
+    enable_questions: true,
+  };
+
+  const now = Date.now();
+  const userProfile: UserProfile = {
+    uid,
+    email,
+    displayName,
+    preferences: defaultPreferences,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await userProfileDoc(uid).set(userProfile);
+  return userProfile;
+}
+
+export async function update_user_preferences(
+  uid: string,
+  preferences: LecturePreferences
+): Promise<void> {
+  await userProfileDoc(uid).update({
+    preferences,
+    updatedAt: Date.now(),
+  });
 }
 
 export { admin, db };

@@ -22,6 +22,7 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  getIdToken: () => Promise<string>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -67,6 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const auth = getClientAuth();
         await firebaseSignOut(auth);
         setUser(null);
+      },
+      getIdToken: async () => {
+        if (!user) {
+          throw new Error("No user is signed in");
+        }
+        return await user.getIdToken();
       },
     }),
     [user, loading],

@@ -4,6 +4,7 @@ import {
   ChangeEvent,
   FormEvent,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -149,9 +150,15 @@ function ClarifyingQuestionCard({
   );
 }
 
+type LecturePreferences = {
+  lecture_length: "short" | "medium" | "long";
+  tone: "direct" | "warm" | "funny";
+  enable_questions: boolean;
+};
+
 export default function LectureConfiguratorPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const [answers, setAnswers] = useState<AnswersState>(() =>
     buildInitialAnswers(),
   );
@@ -167,6 +174,44 @@ export default function LectureConfiguratorPage() {
   const [clarifyingFiles, setClarifyingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [defaultPreferences, setDefaultPreferences] =
+    useState<LecturePreferences | null>(null);
+  const [customPreferences, setCustomPreferences] =
+    useState<LecturePreferences | null>(null);
+  const [showPreferencesCustomization, setShowPreferencesCustomization] =
+    useState(false);
+
+  // Fetch user's default preferences
+  useEffect(() => {
+    async function fetchPreferences() {
+      if (!user) return;
+
+      try {
+        const token = await getIdToken();
+        const response = await fetch(
+          `${getBackendEndpoint()}users/profile`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.profile) {
+            setDefaultPreferences(data.profile.preferences);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching preferences:", error);
+      }
+    }
+
+    if (user) {
+      fetchPreferences();
+    }
+  }, [user, getIdToken]);
 
   const completionRatio = useMemo(() => {
     const baseTotal = Object.keys(answers).length;
@@ -308,6 +353,15 @@ export default function LectureConfiguratorPage() {
           lecture_topic: topic,
         }),
       );
+
+      // Include custom preferences if they've been set
+      if (customPreferences) {
+        formData.append(
+          "lecture_preferences",
+          JSON.stringify(customPreferences)
+        );
+      }
+
       clarifyingFiles.forEach((file) => {
         formData.append("files", file);
       });
@@ -598,6 +652,183 @@ export default function LectureConfiguratorPage() {
             </div>
           </div>
         </section>
+
+        {/* Preferences Section */}
+        {defaultPreferences && (
+          <section className="space-y-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-slate-900">
+                  Lecture preferences
+                </h2>
+                <p className="max-w-3xl text-sm text-slate-600">
+                  {showPreferencesCustomization
+                    ? "Customize preferences for this specific lecture."
+                    : "Using your default preferences. Click 'Customize' to override for this lecture."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowPreferencesCustomization(!showPreferencesCustomization)
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+              >
+                {showPreferencesCustomization ? "Use defaults" : "Customize"}
+              </button>
+            </div>
+
+            {!showPreferencesCustomization ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">
+                      Length:
+                    </span>
+                    <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
+                      {defaultPreferences.lecture_length.charAt(0).toUpperCase() +
+                        defaultPreferences.lecture_length.slice(1)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">Tone:</span>
+                    <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
+                      {defaultPreferences.tone.charAt(0).toUpperCase() +
+                        defaultPreferences.tone.slice(1)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700">
+                      Questions:
+                    </span>
+                    <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
+                      {defaultPreferences.enable_questions ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="space-y-6">
+                  {/* Lecture Length */}
+                  <div>
+                    <label className="mb-3 block text-sm font-semibold text-slate-900">
+                      Lecture Length
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(["short", "medium", "long"] as const).map((length) => {
+                        const prefs = customPreferences ?? defaultPreferences;
+                        return (
+                          <button
+                            key={length}
+                            type="button"
+                            onClick={() =>
+                              setCustomPreferences({
+                                ...(customPreferences ?? defaultPreferences),
+                                lecture_length: length,
+                              })
+                            }
+                            className={`rounded-xl border-2 px-4 py-3 font-medium transition ${
+                              prefs.lecture_length === length
+                                ? "border-sky-600 bg-sky-50 text-sky-700"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                            }`}
+                          >
+                            {length.charAt(0).toUpperCase() + length.slice(1)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Tone */}
+                  <div>
+                    <label className="mb-3 block text-sm font-semibold text-slate-900">
+                      Tone
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(["direct", "warm", "funny"] as const).map((tone) => {
+                        const prefs = customPreferences ?? defaultPreferences;
+                        return (
+                          <button
+                            key={tone}
+                            type="button"
+                            onClick={() =>
+                              setCustomPreferences({
+                                ...(customPreferences ?? defaultPreferences),
+                                tone,
+                              })
+                            }
+                            className={`rounded-xl border-2 px-4 py-3 font-medium transition ${
+                              prefs.tone === tone
+                                ? "border-sky-600 bg-sky-50 text-sky-700"
+                                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                            }`}
+                          >
+                            {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Enable Questions */}
+                  <div>
+                    <label className="mb-3 block text-sm font-semibold text-slate-900">
+                      Practice Questions
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCustomPreferences({
+                          ...(customPreferences ?? defaultPreferences),
+                          enable_questions: !(
+                            customPreferences ?? defaultPreferences
+                          ).enable_questions,
+                        })
+                      }
+                      className={`flex items-center gap-3 rounded-xl border-2 px-5 py-3 transition ${
+                        (customPreferences ?? defaultPreferences)
+                          .enable_questions
+                          ? "border-sky-600 bg-sky-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div
+                        className={`flex h-5 w-5 items-center justify-center rounded border-2 transition ${
+                          (customPreferences ?? defaultPreferences)
+                            .enable_questions
+                            ? "border-sky-600 bg-sky-600"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {(customPreferences ?? defaultPreferences)
+                          .enable_questions && (
+                          <svg
+                            className="h-3 w-3 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={3}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="font-medium text-slate-900">
+                        Enable practice questions
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="space-y-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
