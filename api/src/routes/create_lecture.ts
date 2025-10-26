@@ -31,6 +31,9 @@ import { generate_transcript } from "../helpers/claude/transcript";
 import { generateMermaidDiagrams } from "../helpers/claude/mermaid";
 import { getImageForKeyword } from "../helpers/image";
 import { generateAvatarSpeech } from "../helpers/livekit/tts";
+import { stripUndefinedDeep } from "../lib/firestore_sanitize";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 export const create_lecture_initial: RouteHandler = async (req, res) => {
   const isMultipart =
@@ -215,11 +218,46 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
 };
 
 export const create_lecture_main: WebsocketHandler = async (ws, req) => {
+  // Check for authentication errors from preHandler
+  if ((req as any).authError) {
+    req.log.error({
+      error: (req as any).authError,
+    }, '[LectureGen] WebSocket authentication failed');
+    ws.send(JSON.stringify({
+      success: false,
+      error: (req as any).authError,
+    }));
+    ws.close();
+    return;
+  }
+
+  if (!req.user) {
+    req.log.error('[LectureGen] WebSocket user not authenticated');
+    ws.send(JSON.stringify({
+      success: false,
+      error: "Authentication required",
+    }));
+    ws.close();
+    return;
+  }
+
   const { lecture_id, answers } = req.query as CreateLectureMainRequest;
-  const user = req.user!;
+  const user = req.user;
+
+  req.log.info({
+    lecture_id,
+    user_id: user.uid,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] WebSocket connection established');
 
   const cached = ASSET_CACHE.get(lecture_id);
   if (!cached || cached.uid !== user.uid) {
+    req.log.error({
+      lecture_id,
+      user_id: user.uid,
+      cached_exists: !!cached,
+      uid_match: cached ? cached.uid === user.uid : false,
+    }, '[LectureGen] Lecture not found or forbidden');
     ws.send(
       JSON.stringify({
         success: false,
@@ -230,35 +268,61 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     return;
   }
 
+  req.log.info({
+    lecture_id,
+    user_id: user.uid,
+    topic: cached.lecture_topic,
+    answer_count: Array.isArray(answers) ? answers.length : 0,
+  }, '[LectureGen] Starting transcript generation');
+
   const ts = await generate_transcript(llm, {
     ...cached,
     answers,
   });
+
+  req.log.info({
+    lecture_id,
+    slide_count: ts.length,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] Transcript generation completed');
+
   ws.send(
     JSON.stringify({
       type: "completedOne",
       completed: "transcript",
     } satisfies CreateLectureStatusUpdate)
   );
+
+  const imageCount = ts.filter((s) => s.image !== undefined).length;
+  const diagramCount = ts.filter((s) => s.diagram !== undefined).length;
+  const ttsCount = ts.length;
+
+  req.log.info({
+    lecture_id,
+    images: imageCount,
+    diagrams: diagramCount,
+    tts: ttsCount,
+  }, '[LectureGen] Asset counts enumerated');
+
   ws.send(
     JSON.stringify({
       type: "enumerated",
       thing: "images",
-      total: ts.filter((s) => s.image !== undefined).length,
+      total: imageCount,
     } satisfies CreateLectureStatusUpdate)
   );
   ws.send(
     JSON.stringify({
       type: "enumerated",
       thing: "diagrams",
-      total: ts.filter((s) => s.diagram !== undefined).length,
+      total: diagramCount,
     } satisfies CreateLectureStatusUpdate)
   );
   ws.send(
     JSON.stringify({
       type: "enumerated",
       thing: "tts",
-      total: ts.length,
+      total: ttsCount,
     } satisfies CreateLectureStatusUpdate)
   );
 
@@ -286,9 +350,17 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     ),
   };
 
-  let imageCount = 0;
-  let audioCount = 0;
-  let diagramCount = 0;
+  req.log.info({
+    lecture_id,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] Starting parallel asset generation (images, diagrams, TTS)');
+
+  let completedImageCount = 0;
+  let completedAudioCount = 0;
+  let completedDiagramCount = 0;
+
+  const assetGenerationStart = Date.now();
+
   await Promise.all([
     // ALL DA MERMAID DIAGS
     //
@@ -322,11 +394,18 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       .map(({ s, sidx }) =>
         generateMermaidDiagrams(llm, s.diagram!).then((dg) => {
           lec.slides![sidx].diagram = dg;
+          const currentCount = ++completedDiagramCount;
+          req.log.info({
+            lecture_id,
+            slide_index: sidx,
+            diagram_number: currentCount,
+            total_diagrams: diagramCount,
+          }, '[LectureGen] Diagram generated');
           ws.send(
             JSON.stringify({
               type: "completedOne",
               completed: "diagrams",
-              counter: ++imageCount,
+              counter: currentCount,
             } satisfies CreateLectureStatusUpdate)
           );
         })
@@ -342,11 +421,19 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
           s.image!.extended_description
         ).then((img) => {
           lec.slides![sidx].image = img;
+          const currentCount = ++completedImageCount;
+          req.log.info({
+            lecture_id,
+            slide_index: sidx,
+            search_term: s.image!.search_term,
+            image_number: currentCount,
+            total_images: imageCount,
+          }, '[LectureGen] Image fetched');
           ws.send(
             JSON.stringify({
               type: "completedOne",
               completed: "images",
-              counter: ++diagramCount,
+              counter: currentCount,
             } satisfies CreateLectureStatusUpdate)
           );
         })
@@ -355,28 +442,87 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     ...ts.map((s, sidx) =>
       generateAvatarSpeech(s.transcript).then((speech) => {
         lec.slides![sidx].voiceover = speech.audioUrl;
+        const currentCount = ++completedAudioCount;
+        req.log.info({
+          lecture_id,
+          slide_index: sidx,
+          audio_number: currentCount,
+          total_audio: ttsCount,
+        }, '[LectureGen] Voiceover generated');
         ws.send(
           JSON.stringify({
             type: "completedOne",
             completed: "tts",
-            counter: ++audioCount,
+            counter: currentCount,
           } satisfies CreateLectureStatusUpdate)
         );
       })
     ),
   ]);
 
+  const assetGenerationDuration = Date.now() - assetGenerationStart;
+  req.log.info({
+    lecture_id,
+    duration_ms: assetGenerationDuration,
+    images: completedImageCount,
+    diagrams: completedDiagramCount,
+    tts: completedAudioCount,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] All assets generated');
+
+  req.log.info({
+    lecture_id,
+    user_id: user.uid,
+  }, '[LectureGen] Saving lecture to Firestore');
+
   const ld = lectureDoc(lecture_id);
-  await ld.set(lec as Lecture);
+  const sanitizedLecture = stripUndefinedDeep(lec);
+
+  await writeLectureDebugSnapshot(lecture_id, sanitizedLecture);
+
+  await ld.set(sanitizedLecture as Lecture);
   const ud = userProfileDoc(user.uid);
   await ud.update({
     lectures: admin.firestore.FieldValue.arrayUnion(lecture_id),
   });
+
+  req.log.info({
+    lecture_id,
+    user_id: user.uid,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] Lecture saved to Firestore successfully');
 
   ws.send(
     JSON.stringify({
       type: "completedAll",
     } satisfies CreateLectureStatusUpdate)
   );
+
+  req.log.info({
+    lecture_id,
+    timestamp: new Date().toISOString(),
+  }, '[LectureGen] Lecture generation completed, closing WebSocket');
+
   ws.close();
 };
+
+async function writeLectureDebugSnapshot(
+  lectureId: string,
+  payload: unknown
+) {
+  try {
+    const debugDir = path.resolve(process.cwd(), ".debug", "firestore");
+    await mkdir(debugDir, { recursive: true });
+    const filePath = path.join(
+      debugDir,
+      `${lectureId}-${Date.now()}-lecture.json`
+    );
+    const serialized = JSON.stringify(payload, null, 2);
+    await writeFile(filePath, serialized, "utf-8");
+  } catch (error) {
+    console.warn(
+      "[LectureGen] Failed to write Firestore debug snapshot:",
+      error
+    );
+  }
+}

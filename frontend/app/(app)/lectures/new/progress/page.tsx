@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CreateLectureQuestion, CreateLectureStatusUpdate, CreateLectureAnswer } from "schema";
 import { useAuth } from "@/components/auth/auth-provider";
+import { createLogger } from "@/lib/logger";
+import { getBackendEndpoint } from "@/lib/env";
 
 type JobStatus =
   | "idle"
@@ -21,6 +23,8 @@ type StoredConfig = {
   lectureStubId: string | null;
   createdAt: string;
 };
+
+const logger = createLogger('LectureGen Progress');
 
 export default function LectureProgressPage() {
   const searchParams = useSearchParams();
@@ -53,30 +57,57 @@ export default function LectureProgressPage() {
   }, [status]);
 
   useEffect(() => {
+    logger.info('Page loaded', {
+      timestamp: new Date().toISOString(),
+      configKey,
+    });
+
     if (!configKey) {
+      logger.error('Missing config key in URL params');
       setError("Missing lecture configuration. Please restart the flow.");
       setStatus("error");
       return;
     }
 
     if (typeof window === "undefined") {
+      logger.debug('Window is undefined (SSR), skipping');
       return;
     }
+
+    logger.info('Reading config from sessionStorage', {
+      configKey,
+    });
 
     const storedConfig = sessionStorage.getItem(configKey);
 
     if (!storedConfig) {
-      setError("We couldn’t find your responses. Please restart the flow.");
+      logger.error('Config not found in sessionStorage', {
+        configKey,
+      });
+      setError("We couldn't find your responses. Please restart the flow.");
       setStatus("error");
       return;
     }
+
+    logger.info('Config retrieved from sessionStorage', {
+      configKey,
+      payloadSize: storedConfig.length,
+    });
 
     let parsedConfig: StoredConfig | null = null;
 
     try {
       parsedConfig = JSON.parse(storedConfig) as StoredConfig;
+      logger.info('Config parsed successfully', {
+        lectureStubId: parsedConfig.lectureStubId,
+        questionCount: parsedConfig.clarifyingQuestions?.length ?? 0,
+        createdAt: parsedConfig.createdAt,
+      });
     } catch (parseError) {
-      console.error(parseError);
+      logger.error('Failed to parse config from sessionStorage', {
+        error: parseError,
+        configKey,
+      });
       setError("Your responses were corrupted. Please restart the flow.");
       setStatus("error");
       return;
@@ -85,8 +116,20 @@ export default function LectureProgressPage() {
     setLectureId(parsedConfig.lectureStubId ?? null);
 
     let socket: WebSocket | null = null;
+    let didStart = false;
 
     const startLectureJob = async () => {
+      if (didStart) {
+        logger.debug('Job already started, skipping duplicate execution');
+        return;
+      }
+      didStart = true;
+      logger.info('Starting lecture job', {
+        timestamp: new Date().toISOString(),
+        lectureStubId: parsedConfig.lectureStubId,
+        questionCount: parsedConfig.clarifyingQuestions?.length ?? 0,
+      });
+
       setStatus("connecting");
       try {
         // Build answers array from stored config
@@ -95,26 +138,76 @@ export default function LectureProgressPage() {
           answer: parsedConfig.clarifyingAnswers[q.question_id]
         })) ?? [];
 
+        logger.info('Built answers array', {
+          answerCount: answersArray.length,
+        });
+
         // Get authentication token
         const token = await getIdToken();
+        logger.info('Retrieved authentication token');
 
         // Build WebSocket URL with proper parameters
-        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const backendEndpoint = getBackendEndpoint();
         const params = new URLSearchParams({
           lecture_id: parsedConfig.lectureStubId!,
           answers: JSON.stringify(answersArray),
           token: token
         });
-        const socketUrl = `${protocol}://${window.location.host}/api/lecture?${params}`;
+        let socketUrl: string;
+        try {
+          const baseUrl = backendEndpoint.startsWith("http")
+            ? backendEndpoint
+            : `http://${backendEndpoint}`;
+          const wsUrl = new URL(baseUrl);
+          wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+          wsUrl.pathname = "/api/lecture";
+          wsUrl.search = params.toString();
+          socketUrl = wsUrl.toString();
+
+          logger.info('WebSocket URL constructed', {
+            protocol: wsUrl.protocol,
+            host: wsUrl.host,
+            lectureId: parsedConfig.lectureStubId,
+            answerCount: answersArray.length,
+            url: socketUrl,
+          });
+        } catch (urlError) {
+          logger.error('Failed to construct WebSocket URL', {
+            error: urlError,
+            backendEndpoint,
+          });
+          throw urlError;
+        }
+
+        logger.info('Initiating WebSocket connection to /api/lecture', {
+          timestamp: new Date().toISOString(),
+        });
 
         socket = new WebSocket(socketUrl);
-        socket.onopen = () => setStatus("connected");
+
+        socket.onopen = () => {
+          logger.info('WebSocket connection opened', {
+            timestamp: new Date().toISOString(),
+            lectureId: parsedConfig.lectureStubId,
+          });
+          setStatus("connected");
+        };
+
         socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data) as CreateLectureStatusUpdate;
+            logger.info('WebSocket message received', {
+              timestamp: new Date().toISOString(),
+              messageType: data.type,
+              data,
+            });
 
             switch (data.type) {
               case "completedOne":
+                logger.info('Item completed', {
+                  completed: data.completed,
+                  counter: 'counter' in data ? data.counter : undefined,
+                });
                 if (data.completed === "transcript") {
                   setTranscriptComplete(true);
                 } else {
@@ -124,29 +217,63 @@ export default function LectureProgressPage() {
                 break;
 
               case "enumerated":
+                logger.info('Total enumerated', {
+                  thing: data.thing,
+                  total: data.total,
+                });
                 // Set total counts for images/diagrams/tts
                 setTotalCounts(prev => ({ ...prev, [data.thing]: data.total }));
                 break;
 
               case "completedAll":
+                logger.info('All items completed', {
+                  timestamp: new Date().toISOString(),
+                  lectureId: parsedConfig.lectureStubId,
+                });
                 setStatus("completed");
+                // Clean up sessionStorage now that we're done
+                if (typeof window !== "undefined" && configKey) {
+                  sessionStorage.removeItem(configKey);
+                  logger.info('Cleaned up sessionStorage', {
+                    configKey,
+                  });
+                }
                 // Redirect to lecture display page
                 setTimeout(() => {
+                  logger.info('Redirecting to lecture display page');
                   router.push(`/lectures/${parsedConfig.lectureStubId}`);
                 }, 1500);
                 break;
             }
           } catch (err) {
-            console.error("Failed to parse WebSocket message:", err);
+            logger.error('Failed to parse WebSocket message', {
+              error: err,
+              rawData: event.data,
+            });
           }
         };
+
         socket.onerror = (event) => {
-          console.error(event);
+          logger.error('WebSocket error', {
+            timestamp: new Date().toISOString(),
+            event,
+          });
           setError("WebSocket connection failed.");
           setStatus("error");
         };
+
+        socket.onclose = (event) => {
+          logger.info('WebSocket connection closed', {
+            timestamp: new Date().toISOString(),
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+          });
+        };
       } catch (jobError) {
-        console.error(jobError);
+        logger.error('Error starting lecture job', {
+          error: jobError,
+        });
         setError(
           "We couldn't start the lecture generation. Please try again.",
         );
@@ -157,12 +284,20 @@ export default function LectureProgressPage() {
     startLectureJob();
 
     return () => {
+      logger.debug('Cleanup: closing WebSocket', {
+        timestamp: new Date().toISOString(),
+        hasSocket: !!socket,
+      });
       if (socket) {
         socket.close();
       }
-      sessionStorage.removeItem(configKey);
+      // Note: We intentionally do NOT remove from sessionStorage here
+      // because React Strict Mode runs effects twice in development,
+      // which would cause the second run to fail when the first cleanup
+      // removes the item. We'll rely on sessionStorage's session-based
+      // cleanup or remove it after successful completion.
     };
-  }, [configKey]);
+  }, [configKey, getIdToken]);
 
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-4xl flex-col items-start justify-center gap-8 px-6 py-16">
@@ -191,68 +326,59 @@ export default function LectureProgressPage() {
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-slate-700">Transcript</span>
             {transcriptComplete ? (
-              <span className="flex items-center gap-2 text-sm font-semibold text-green-600">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Complete
-              </span>
+              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
             ) : (
-              <span className="text-sm text-slate-500">Generating...</span>
+              <svg className="h-6 w-6 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
             )}
           </div>
 
           {/* Images */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">Images</span>
-              <span className="text-sm font-semibold text-slate-900">
-                {progress.images} / {totalCounts.images}
-              </span>
-            </div>
-            {totalCounts.images > 0 && (
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-sky-500 transition-all duration-300"
-                  style={{ width: `${(progress.images / totalCounts.images) * 100}%` }}
-                />
-              </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">Images</span>
+            {totalCounts.images > 0 && progress.images >= totalCounts.images ? (
+              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
             )}
           </div>
 
           {/* Diagrams */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">Diagrams</span>
-              <span className="text-sm font-semibold text-slate-900">
-                {progress.diagrams} / {totalCounts.diagrams}
-              </span>
-            </div>
-            {totalCounts.diagrams > 0 && (
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-purple-500 transition-all duration-300"
-                  style={{ width: `${(progress.diagrams / totalCounts.diagrams) * 100}%` }}
-                />
-              </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">Diagrams</span>
+            {totalCounts.diagrams > 0 && progress.diagrams >= totalCounts.diagrams ? (
+              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
             )}
           </div>
 
           {/* Voiceovers */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">Voiceovers</span>
-              <span className="text-sm font-semibold text-slate-900">
-                {progress.tts} / {totalCounts.tts}
-              </span>
-            </div>
-            {totalCounts.tts > 0 && (
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                  style={{ width: `${(progress.tts / totalCounts.tts) * 100}%` }}
-                />
-              </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">Voiceovers</span>
+            {totalCounts.tts > 0 && progress.tts >= totalCounts.tts ? (
+              <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
             )}
           </div>
         </div>

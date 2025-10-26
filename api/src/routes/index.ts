@@ -5,7 +5,6 @@ import {
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
 import { LectureStore } from "../lib/lecture-store.js";
-// import type { WebsocketHandler } from "@fastify/websocket";
 import { create_lecture_initial, create_lecture_main } from "./create_lecture.js";
 import { verify_firebase_token } from "../middleware/firebase.js";
 import {
@@ -14,23 +13,26 @@ import {
   create_profile_handler,
 } from "./user_profile.js";
 
-const createLectureAssetHandler = (
-  _lectureStore: LectureStore,
-): RouteHandler => {
-  return async (_request, reply) => {
-    reply.code(501).send({
-      error: "not_implemented",
-      message:
-        "Lecture asset retrieval is not yet implemented. TODO: wire up createLectureAssetHandler.",
+// HTTP handler for WebSocket-only lecture endpoint
+const createLectureHttpHandler = (): RouteHandler => {
+  return async (request, reply) => {
+    // If this is a WebSocket upgrade, let it proceed
+    const upgradeHeader = request.headers?.upgrade;
+    if (typeof upgradeHeader === 'string' && upgradeHeader.toLowerCase() === 'websocket') {
+      return;
+    }
+
+    // Otherwise, reject non-WebSocket HTTP requests
+    reply.code(426).send({
+      error: 'upgrade_required',
+      message: 'Connect to this endpoint via WebSocket to generate a lecture. Include the lecture_id and answers as query parameters.',
     });
   };
 };
 
-// Stub handler removed - now using create_lecture_main directly
-
 export function registerRoutes(
   app: FastifyInstance,
-  lectureStore: LectureStore
+  _lectureStore: LectureStore
 ): void {
   const MAX_RESPONSE_LOG_BYTES = 1024 * 16;
 
@@ -101,16 +103,14 @@ export function registerRoutes(
   app.route({
     method: "GET",
     url: "/api/lecture",
-    websocket: true,
     preHandler: verify_firebase_token,
-    handler: createLectureAssetHandler(lectureStore),
+    handler: createLectureHttpHandler(),
     wsHandler: create_lecture_main,
   });
 
   app.route({
     method: "GET",
     url: "/api/tts",
-    websocket: true,
     handler: createTtsHttpHandler(),
     wsHandler: createTtsWebsocketHandler(),
   });

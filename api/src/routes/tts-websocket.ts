@@ -17,7 +17,14 @@ type TtsRequest = z.infer<typeof TtsRequestSchema>;
 const READY_MESSAGE = JSON.stringify({ type: 'ready' });
 
 export function createTtsHttpHandler(): RouteHandler {
-  return async (_request, reply) => {
+  return async (request, reply) => {
+    // If this is a WebSocket upgrade, let it proceed
+    const upgradeHeader = request.headers?.upgrade;
+    if (typeof upgradeHeader === 'string' && upgradeHeader.toLowerCase() === 'websocket') {
+      return;
+    }
+
+    // Otherwise, reject non-WebSocket HTTP requests
     reply.code(426).send({
       error: 'upgrade_required',
       message: 'Connect to this endpoint via WebSocket to request text-to-speech synthesis.',
