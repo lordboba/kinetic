@@ -1,13 +1,18 @@
 import * as z from "zod";
 
 import { CreateLectureQuestion, LecturePreferences } from "schema";
+import { LecturePreferencesSchema } from "../../schemas/create-lecture.js";
 import { LLM } from "./llm";
 
-type GenerateClarifyingQuestionsRequest = {
-  topic: string;
-  user_preferences: LecturePreferences;
-  custom_preferences?: LecturePreferences;
-};
+export const ZGenerateClarifyingQuestionsRequest = z.object({
+  topic: z.string().min(1),
+  user_preferences: LecturePreferencesSchema,
+  custom_preferences: LecturePreferencesSchema.optional(),
+});
+
+export type GenerateClarifyingQuestionsRequest = z.infer<
+  typeof ZGenerateClarifyingQuestionsRequest
+>;
 
 // zod type for the LLM (makes it return it in a specific format)
 // Note: Anthropic tool calling requires the root schema to be an object, not an array
@@ -50,11 +55,13 @@ export async function generate_clarifying_questions(
   llm: LLM,
   req: GenerateClarifyingQuestionsRequest
 ): Promise<CreateLectureQuestion[]> {
+  const parsedReq = ZGenerateClarifyingQuestionsRequest.parse(req);
+
   const {
     topic,
     user_preferences,
     custom_preferences,
-  } = req;
+  } = parsedReq;
 
   const effective_preferences = {
     ...user_preferences,

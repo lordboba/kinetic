@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { CreateLectureQuestion } from "schema";
 
 type JobStatus =
   | "idle"
@@ -10,8 +11,13 @@ type JobStatus =
   | "connected"
   | "error";
 
+type ClarifyingAnswersState = Record<string, string | string[]>;
+
 type StoredConfig = {
-  answers: Record<string, string>;
+  baseAnswers: Record<string, string>;
+  clarifyingAnswers: ClarifyingAnswersState;
+  clarifyingQuestions: CreateLectureQuestion[] | null;
+  lectureStubId: string | null;
   createdAt: string;
 };
 
@@ -69,6 +75,8 @@ export default function LectureProgressPage() {
       return;
     }
 
+    setLectureId(parsedConfig.lectureStubId ?? null);
+
     let socket: WebSocket | null = null;
 
     const startLectureJob = async () => {
@@ -78,8 +86,12 @@ export default function LectureProgressPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            topic: parsedConfig?.answers?.["lecture-topic"] ?? "Custom lecture",
-            answers: parsedConfig?.answers,
+            lectureStubId: parsedConfig?.lectureStubId,
+            topic:
+              parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
+            baseAnswers: parsedConfig?.baseAnswers,
+            clarifyingAnswers: parsedConfig?.clarifyingAnswers,
+            clarifyingQuestions: parsedConfig?.clarifyingQuestions,
           }),
         });
 

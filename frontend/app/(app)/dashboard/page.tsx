@@ -247,14 +247,34 @@ export default function DashboardPage() {
 
     try {
       if (backendEndpoint) {
-        const response = await fetch(`${backendEndpoint}create-project`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const payload = {
+          lecture_config: {
+            lecture_topic: "Untitled Lecture",
           },
-          body: JSON.stringify({
-            // Add necessary payload
-          }),
+          lecture_preferences: {
+            lecture_length: "medium",
+            tone: "warm",
+            enable_questions: true,
+          },
+        };
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+
+        if (user) {
+          try {
+            const token = await user.getIdToken();
+            headers.Authorization = `Bearer ${token}`;
+          } catch (error) {
+            console.warn("Failed to fetch auth token; proceeding without it.", error);
+          }
+        }
+
+        const response = await fetch(`${backendEndpoint}create-lecture-initial`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
