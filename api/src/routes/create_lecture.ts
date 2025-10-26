@@ -346,7 +346,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
           content: t.slide.markdown_body,
           // diagram
           // image
-          // voiceover
+          // audio_transcription_link
         }) satisfies Partial<LectureSlide>
     ),
   };
@@ -432,9 +432,10 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
             dataUrl: resolvedAudioUrl,
             lectureId: lecture_id,
             slideIndex: sidx,
-            metadata: {
+            customMetadata: {
               requestId: speech.requestId ?? undefined,
             },
+            cacheControl: "public,max-age=31536000,immutable",
           });
           resolvedAudioUrl = upload.signedUrl;
           req.log.info({
@@ -452,7 +453,6 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       }
 
       if (resolvedAudioUrl) {
-        lec.slides![sidx].voiceover = resolvedAudioUrl;
         lec.slides![sidx].audio_transcription_link = resolvedAudioUrl;
       }
 

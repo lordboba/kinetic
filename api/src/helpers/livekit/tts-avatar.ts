@@ -194,10 +194,11 @@ export async function synthesizeAvatarSpeech(
         filenameHint: Number.isFinite(slideIndexValue)
           ? `slide-${String(Number(slideIndexValue) + 1).padStart(2, '0')}`
           : resolvedRequestId,
-        metadata: {
+        customMetadata: {
           requestId: resolvedRequestId,
         },
         expiresInMs: DEFAULT_VOICEOVER_SIGNED_URL_TTL_MS,
+        cacheControl: 'public,max-age=31536000,immutable',
       });
       audioUrl = uploadResult.signedUrl;
 

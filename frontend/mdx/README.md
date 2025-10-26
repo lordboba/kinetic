@@ -69,7 +69,7 @@ const slides: PartialSlide[] = [
 From `/types/index.d.ts`:
 
 ```typescript
-type PartialSlide = Omit<LectureSlide, "transcript" | "voiceover">
+type PartialSlide = Omit<LectureSlide, "transcript" | "audio_transcription_link">
 
 // Expands to:
 type PartialSlide = {

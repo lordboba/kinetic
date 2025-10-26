@@ -99,7 +99,7 @@ export default function MDXTestPage() {
                   hasContent: !!slide.content,
                   hasDiagram: !!slide.diagram,
                   hasImage: !!slide.image,
-                  hasVoiceover: !!slide.voiceover,
+                  hasVoiceover: !!slide.audio_transcription_link,
                   hasQuestion: !!slide.question,
                   contentLength: slide.content?.length || 0,
                   transcriptLength: slide.transcript?.length || 0

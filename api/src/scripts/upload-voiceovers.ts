@@ -9,7 +9,6 @@ import {
   initializeApp,
   ServiceAccount,
 } from "firebase-admin/app";
-import { getStorage } from "firebase-admin/storage";
 import type { Lecture } from "schema";
 import { uploadVoiceoverDataUrl } from "../helpers/storage/voiceovers";
 
@@ -168,34 +167,41 @@ async function uploadVoiceovers({
   lecture,
   lectureId,
   expiresInDays,
-  bucketName,
 }: {
   lecture: Lecture;
   lectureId: string;
   expiresInDays: number;
-  bucketName: string;
 }): Promise<UploadSummary[]> {
-  const storage = getStorage();
-  const bucket = storage.bucket(bucketName);
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
   const uploads: UploadSummary[] = [];
 
   for (const [index, slide] of lecture.slides.entries()) {
-    if (!slide.voiceover || !slide.voiceover.startsWith("data:")) {
+    const legacyVoiceover = (slide as Record<string, unknown>).voiceover;
+    const candidateLink =
+      typeof slide.audio_transcription_link === "string"
+        ? slide.audio_transcription_link
+        : typeof legacyVoiceover === "string"
+          ? legacyVoiceover
+          : undefined;
+    if (typeof candidateLink !== "string" || !candidateLink.startsWith("data:")) {
       continue;
     }
+    if (!slide.audio_transcription_link) {
+      if (typeof legacyVoiceover === "string") {
+        // @ts-expect-error backward compatibility for legacy voiceover field
+        delete (slide as Record<string, unknown>).voiceover;
+      }
+      slide.audio_transcription_link = candidateLink;
+    }
     const upload = await uploadVoiceoverDataUrl({
-      dataUrl: slide.voiceover,
+      dataUrl: slide.audio_transcription_link,
       lectureId,
       slideIndex: index,
       expiresAt,
-      metadata: {
-        cacheControl: "public,max-age=31536000,immutable",
-      },
+      cacheControl: "public,max-age=31536000,immutable",
     });
 
-    slide.voiceover = upload.signedUrl;
     slide.audio_transcription_link = upload.signedUrl;
     uploads.push({
       index,
@@ -230,7 +236,6 @@ async function main() {
     lecture,
     lectureId,
     expiresInDays,
-    bucketName,
   });
 
   if (uploads.length === 0) {

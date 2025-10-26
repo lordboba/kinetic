@@ -15,7 +15,7 @@ type LecturePreferences = {
 
 export const ZLectureSlide = z.object({
   transcript: z.string(),
-  voiceover: z.string(), // download URL
+  audio_transcription_link: z.string(), // signed download URL
   title: z.string(),
   content: z.string().optional(),
   diagram: z.string().optional(),
@@ -32,6 +32,7 @@ export const ZLecture = z.object({
 // Inferred TypeScript types (optional)
 export type LectureSlide = z.infer<typeof ZLectureSlide>;
 export type Lecture = z.infer<typeof ZLecture>;
+export type PartialSlide = Omit<LectureSlide, "transcript" | "audio_transcription_link">;
 
 type User = {
   lectures: string[]; // by lecture.id or just uuid[]

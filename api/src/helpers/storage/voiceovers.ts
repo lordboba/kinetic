@@ -30,9 +30,9 @@ export type UploadVoiceoverBufferOptions = {
    */
   filenameHint?: string;
   /**
-   * Additional metadata to store on the GCS object. Values are coerced to strings.
+   * Custom metadata to store on the GCS object. Values are coerced to strings.
    */
-  metadata?: Record<string, string | number | boolean | undefined>;
+  customMetadata?: Record<string, string | number | boolean | undefined>;
   /**
    * Explicit expiry for the signed URL. When omitted the helper falls back
    * to expiresInMs or the default TTL.
@@ -121,8 +121,8 @@ function buildVoiceoverStoragePath({
   return `voiceovers/${slideSuffix}.${extension}`;
 }
 
-function coerceMetadata(
-  metadata: UploadVoiceoverBufferOptions["metadata"]
+function coerceCustomMetadata(
+  metadata: UploadVoiceoverBufferOptions["customMetadata"]
 ): Record<string, string> | undefined {
   if (!metadata) {
     return undefined;
@@ -152,7 +152,7 @@ export async function uploadVoiceoverBuffer(
     buffer,
     mimeType,
     filenameHint,
-    metadata,
+    customMetadata,
     expiresAt,
     expiresInMs,
     cacheControl,
@@ -175,15 +175,19 @@ export async function uploadVoiceoverBuffer(
   const bucket = admin.storage().bucket(storageBucketName);
   const file = bucket.file(storagePath);
 
+  const customMetadataRecord = coerceCustomMetadata({
+    ...customMetadata,
+    lectureId,
+    slideIndex,
+  });
+
   await file.save(buffer, {
     resumable: false,
     contentType: mimeType,
-    cacheControl,
-    metadata: coerceMetadata({
-      ...metadata,
-      lectureId,
-      slideIndex,
-    }),
+    metadata: {
+      ...(cacheControl ? { cacheControl } : {}),
+      ...(customMetadataRecord ? { metadata: customMetadataRecord } : {}),
+    },
   });
 
   const resolvedExpiry =
@@ -222,8 +226,9 @@ export async function uploadVoiceoverDataUrl(
     buffer: payload.buffer,
     mimeType: payload.mimeType,
     filenameHint: options.filenameHint,
-    metadata: options.metadata,
+    customMetadata: options.customMetadata,
     expiresAt: options.expiresAt,
     expiresInMs: options.expiresInMs,
+    cacheControl: options.cacheControl,
   });
 }

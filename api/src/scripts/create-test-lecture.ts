@@ -13,7 +13,7 @@ async function createTestLecture() {
     slides: [
       {
         transcript: "Welcome to our first slide about neural networks",
-        voiceover: "",
+        audio_transcription_link: "",
         title: "Introduction to Neural Networks",
         content: `## What are Neural Networks?
 
@@ -34,7 +34,7 @@ Neural networks are computing systems inspired by biological neural networks.
       },
       {
         transcript: "Now let's look at how data flows through the network",
-        voiceover: "",
+        audio_transcription_link: "",
         title: "Data Flow Process",
         content: `## Forward Propagation
 
@@ -65,7 +65,7 @@ def forward_pass(input_data, weights):
       },
       {
         transcript: "Training involves adjusting weights to minimize errors",
-        voiceover: "",
+        audio_transcription_link: "",
         title: "Training Process",
         content: `## Backpropagation
 
@@ -83,7 +83,7 @@ The learning rate determines how quickly the network adapts.`,
       },
       {
         transcript: "Let's see a complete example with code",
-        voiceover: "",
+        audio_transcription_link: "",
         title: "Code Example",
         content: `## Simple Neural Network in Python
 
@@ -117,7 +117,7 @@ This creates a network with:
       },
       {
         transcript: "Summary of what we learned today",
-        voiceover: "",
+        audio_transcription_link: "",
         title: "Summary",
         content: `## Key Takeaways
 
