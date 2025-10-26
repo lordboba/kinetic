@@ -5,8 +5,8 @@ import {
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
 import { LectureStore } from "../lib/lecture-store.js";
-import type { WebsocketHandler } from "@fastify/websocket";
-import { create_lecture_initial } from "./create_lecture.js";
+// import type { WebsocketHandler } from "@fastify/websocket";
+import { create_lecture_initial, create_lecture_main } from "./create_lecture.js";
 import { verify_firebase_token } from "../middleware/firebase.js";
 import {
   get_profile_handler,
@@ -26,13 +26,7 @@ const createLectureAssetHandler = (
   };
 };
 
-const createLectureStreamHandler = (
-  _lectureStore: LectureStore,
-): WebsocketHandler => {
-  return (socket) => {
-    socket.close(1011, "Lecture stream handler not yet connected.");
-  };
-};
+// Stub handler removed - now using create_lecture_main directly
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -108,8 +102,9 @@ export function registerRoutes(
     method: "GET",
     url: "/api/lecture",
     websocket: true,
+    preHandler: verify_firebase_token,
     handler: createLectureAssetHandler(lectureStore),
-    wsHandler: createLectureStreamHandler(lectureStore),
+    wsHandler: create_lecture_main,
   });
 
   app.route({

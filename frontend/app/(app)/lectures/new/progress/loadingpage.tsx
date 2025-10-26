@@ -7,9 +7,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 
 type JobStatus =
   | "idle"
-  // | "starting"
   | "connecting"
   | "connected"
+  | "completed"
   | "error";
 
 type ClarifyingAnswersState = Record<string, string | string[]>;
@@ -26,23 +26,29 @@ export default function LectureProgressPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const configKey = searchParams.get("config");
+  const { getIdToken } = useAuth();
 
   const [status, setStatus] = useState<JobStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [lectureId, setLectureId] = useState<string | null>(null);
 
+  // Progress tracking state
+  const [transcriptComplete, setTranscriptComplete] = useState(false);
+  const [totalCounts, setTotalCounts] = useState({ images: 0, diagrams: 0, tts: 0 });
+  const [progress, setProgress] = useState({ images: 0, diagrams: 0, tts: 0 });
+
   const headline = useMemo(() => {
     switch (status) {
-      case "starting":
-        return "Spinning up the instructor duo…";
       case "connecting":
         return "Connecting to the lecture stream…";
       case "connected":
-        return "Lecture assets are on the way.";
+        return "Generating your lecture…";
+      case "completed":
+        return "Lecture complete! Redirecting…";
       case "error":
         return "We hit a snag preparing your lecture.";
       default:
-        return "Preparing lecture generation handoff.";
+        return "Preparing lecture generation.";
     }
   }, [status]);
 
@@ -81,59 +87,68 @@ export default function LectureProgressPage() {
     let socket: WebSocket | null = null;
 
     const startLectureJob = async () => {
-      setStatus("starting");
+      setStatus("connecting");
       try {
-        // const response = await fetch("/api/newLecture", {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify({
-        //     lectureStubId: parsedConfig?.lectureStubId,
-        //     topic:
-        //       parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
-        //     baseAnswers: parsedConfig?.baseAnswers,
-        //     clarifyingAnswers: parsedConfig?.clarifyingAnswers,
-        //     clarifyingQuestions: parsedConfig?.clarifyingQuestions,
-        //   }),
-        // });
+        // Build answers array from stored config
+        const answersArray = parsedConfig.clarifyingQuestions?.map(q => ({
+          question_id: q.question_id,
+          answer: parsedConfig.clarifyingAnswers[q.question_id]
+        })) ?? [];
 
-        // if (!response.ok) {
-        //   throw new Error(
-        //     `Failed to create lecture job (${response.statusText})`,
-        //   );
-        // }
+        // Get authentication token
+        const token = await getIdToken();
 
-        // const payload = (await response.json()) as { id?: string };
-        // const jobId = payload?.id;
-
-        // if (!jobId) {
-        //   throw new Error("Lecture job missing identifier.");
-        // }
-
-        // setLectureId(jobId);
-        // setStatus("connecting");
-
-        topic:
-          parsedConfig?.baseAnswers?.["lecture-topic"] ?? "Custom lecture",
-        baseAnswers: parsedConfig?.baseAnswers,
-        clarifyingAnswers: parsedConfig?.clarifyingAnswers,
-        clarifyingQuestions: parsedConfig?.clarifyingQuestions,
-
+        // Build WebSocket URL with proper parameters
         const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-        // const socketUrl = `${protocol}://${window.location.host}/api/lecture?id=${jobId}`;
-        const socketUrl = `${protocol}://${window.location.host}/api/lecture?lecture_id=${lectureId}&answers=${encodeURIComponent(JSON.stringify(answersArray))}`;
+        const params = new URLSearchParams({
+          lecture_id: parsedConfig.lectureStubId!,
+          answers: JSON.stringify(answersArray),
+          token: token
+        });
+        const socketUrl = `${protocol}://${window.location.host}/api/lecture?${params}`;
+
         socket = new WebSocket(socketUrl);
         socket.onopen = () => setStatus("connected");
-        socket.onmessage = (event) =>
-          console.debug("lecture-progress", event.data);
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as CreateLectureStatusUpdate;
+
+            switch (data.type) {
+              case "completedOne":
+                if (data.completed === "transcript") {
+                  setTranscriptComplete(true);
+                } else {
+                  // Update progress counter for images/diagrams/tts
+                  setProgress(prev => ({ ...prev, [data.completed]: data.counter }));
+                }
+                break;
+
+              case "enumerated":
+                // Set total counts for images/diagrams/tts
+                setTotalCounts(prev => ({ ...prev, [data.thing]: data.total }));
+                break;
+
+              case "completedAll":
+                setStatus("completed");
+                // Redirect to lecture display page
+                setTimeout(() => {
+                  router.push(`/lectures/${parsedConfig.lectureStubId}`);
+                }, 1500);
+                break;
+            }
+          } catch (err) {
+            console.error("Failed to parse WebSocket message:", err);
+          }
+        };
         socket.onerror = (event) => {
           console.error(event);
-          setError("WebSocket connection failed. TODO: add retry logic.");
+          setError("WebSocket connection failed.");
           setStatus("error");
         };
       } catch (jobError) {
         console.error(jobError);
         setError(
-          "We couldn’t start the lecture generation. TODO: show recovery options.",
+          "We couldn't start the lecture generation. Please try again.",
         );
         setStatus("error");
       }
@@ -157,29 +172,103 @@ export default function LectureProgressPage() {
         </p>
         <h1 className="text-3xl font-semibold text-slate-900">{headline}</h1>
         <p className="max-w-2xl text-sm text-slate-600">
-          TODO: Build the real-time lecture assembly view. For now we&apos;re
-          capturing the responses you shared and initiating the backend job +
-          websocket connection.
+          Watch as your lecture comes to life. We&apos;re generating the transcript,
+          finding images, creating diagrams, and synthesizing voiceovers in real-time.
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between text-sm text-slate-600">
-          <span>Status</span>
-          <span className="font-semibold text-slate-900">{status}</span>
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
         </div>
-        <div className="flex items-center justify-between text-sm text-slate-600">
-          <span>Lecture ID</span>
-          <span className="font-mono text-xs text-slate-500">
-            {lectureId ?? "pending…"}
-          </span>
-        </div>
-        {error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error}
+      ) : null}
+
+      {status === "connected" && (
+        <div className="w-full space-y-4 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Generation Progress</h2>
+
+          {/* Transcript */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">Transcript</span>
+            {transcriptComplete ? (
+              <span className="flex items-center gap-2 text-sm font-semibold text-green-600">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Complete
+              </span>
+            ) : (
+              <span className="text-sm text-slate-500">Generating...</span>
+            )}
           </div>
-        ) : null}
-      </div>
+
+          {/* Images */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-700">Images</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {progress.images} / {totalCounts.images}
+              </span>
+            </div>
+            {totalCounts.images > 0 && (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-sky-500 transition-all duration-300"
+                  style={{ width: `${(progress.images / totalCounts.images) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Diagrams */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-700">Diagrams</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {progress.diagrams} / {totalCounts.diagrams}
+              </span>
+            </div>
+            {totalCounts.diagrams > 0 && (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-purple-500 transition-all duration-300"
+                  style={{ width: `${(progress.diagrams / totalCounts.diagrams) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Voiceovers */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-700">Voiceovers</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {progress.tts} / {totalCounts.tts}
+              </span>
+            </div>
+            {totalCounts.tts > 0 && (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${(progress.tts / totalCounts.tts) * 100}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {status === "completed" && (
+        <div className="flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 p-6">
+          <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <div>
+            <p className="font-semibold text-green-900">Lecture complete!</p>
+            <p className="text-sm text-green-700">Redirecting you to your lecture...</p>
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
