@@ -112,6 +112,27 @@ function useLectureChannel(lectureId: string): UseLectureChannelReturn {
             }
             console.log('[useLectureChannel] User question response received');
             setLastAnswer(answerValidation.data);
+
+            // If partial lecture update is included, merge the new slides
+            if (answerValidation.data.partial_lecture) {
+              console.log('[useLectureChannel] Partial lecture update detected, updating slides');
+              setLecture((prevLecture) => {
+                if (!prevLecture) return prevLecture;
+
+                const { from_slide, slides: newSlides } = answerValidation.data.partial_lecture!;
+                const updatedSlides = [
+                  ...prevLecture.slides.slice(0, from_slide),
+                  ...newSlides,
+                ];
+
+                console.log(`[useLectureChannel] Updated lecture with ${newSlides.length} new slides from slide ${from_slide}`);
+
+                return {
+                  ...prevLecture,
+                  slides: updatedSlides,
+                };
+              });
+            }
             break;
           }
 
@@ -384,12 +405,18 @@ export default function MDXTestPage() {
           {/* Last Answer from User Question */}
           {lastAnswer && (
             <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <h4 className="font-semibold text-green-900 text-sm mb-1">Answer:</h4>
-              <p className="text-green-800 text-sm">{lastAnswer.answer}</p>
+              <h4 className="font-semibold text-green-900 text-sm mb-1">
+                {lastAnswer.partial_lecture ? 'Lecture Regenerated:' : 'Answer:'}
+              </h4>
+              <p className="text-green-800 text-sm">{lastAnswer.response.response}</p>
               {lastAnswer.partial_lecture && (
-                <p className="text-xs text-green-600 mt-2">
-                  Lecture updated from slide {lastAnswer.partial_lecture.from_slide + 1}
-                </p>
+                <div className="mt-3 p-2 bg-green-100 rounded text-xs text-green-700">
+                  <p className="font-semibold mb-1">✨ Slides have been regenerated!</p>
+                  <p>
+                    Added {lastAnswer.partial_lecture.slides.length} new slide{lastAnswer.partial_lecture.slides.length !== 1 ? 's' : ''} starting from slide {lastAnswer.partial_lecture.from_slide + 1}.
+                    The lecture has been updated based on your question.
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -448,7 +475,7 @@ export default function MDXTestPage() {
                 }
               }}
               placeholder={`Ask a question about slide ${currentSlide + 1}...`}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               disabled={phase !== 'ready'}
             />
             <button

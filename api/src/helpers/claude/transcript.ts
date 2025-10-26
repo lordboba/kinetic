@@ -188,5 +188,13 @@ Adjust your response according to the current lecture preferences:
 `;
 
   const response = await llm.sendMessage(PROMPT, ZGenerateTranscriptResponse);
+
+  if (!response || !response.slides || response.slides.length === 0) {
+    throw new Error(
+      "LLM returned invalid transcript response: " +
+      (response ? `missing or empty slides array` : "undefined response")
+    );
+  }
+
   return response.slides;
 }

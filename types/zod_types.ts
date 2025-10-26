@@ -66,9 +66,15 @@ export const ZUserAnalyzeQuery = z.discriminatedUnion("answer_category", [
   }),
 ]);
 
+export const ZPartialLecture = z.object({
+  from_slide: z.number(),
+  slides: z.array(ZLectureSlide),
+});
+
 export const ZUserQuestionResponse = z.object({
   type: z.literal("user_question_response"),
   response: ZUserAnalyzeQuery,
+  partial_lecture: ZPartialLecture.optional(),
 });
 
 export const ZBackendQuestionRequest = z.object({
@@ -100,6 +106,7 @@ export type GetLectureRequest = z.infer<typeof ZGetLectureRequest>;
 export type GetLectureResponse = z.infer<typeof ZGetLectureResponse>;
 export type UserQuestionRequest = z.infer<typeof ZUserQuestionRequest>;
 export type UserQuestionResponse = z.infer<typeof ZUserQuestionResponse>;
+export type PartialLecture = z.infer<typeof ZPartialLecture>;
 export type BackendQuestionRequest = z.infer<typeof ZBackendQuestionRequest>;
 export type BackendQuestionResponse = z.infer<typeof ZBackendQuestionResponse>;
 
