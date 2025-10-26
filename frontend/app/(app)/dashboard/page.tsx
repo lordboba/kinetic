@@ -27,7 +27,7 @@ export default function DashboardPage() {
       try {
         const token = await getIdToken();
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/lectures`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/get_lectures`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
