@@ -365,6 +365,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
   const lec: RecursivePartial<Lecture> = {
     permitted_users: [user.uid],
     version: 1,
+    topic: cached.lecture_topic,
     slides: ts.map(
       (t) =>
         ({

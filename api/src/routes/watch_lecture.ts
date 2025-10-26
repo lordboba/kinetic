@@ -4,6 +4,7 @@ import { lectureDoc } from "../lib/firebase_admin";
 import { llm } from "../lib/mouse";
 import {
   ZInboundMessage,
+  ZGetLectureResponse,
   GetLectureRequest,
   UserQuestionRequest,
   BackendQuestionRequest,
@@ -61,6 +62,28 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
       return;
     }
 
+    // Validate lecture data matches schema before sending
+    const response = {
+      type: "get_lecture_response" as const,
+      lecture: lectureData,
+    };
+
+    const validation = ZGetLectureResponse.safeParse(response);
+    if (!validation.success) {
+      console.error(
+        "[watch_lecture] Lecture data validation failed:",
+        z.treeifyError(validation.error)
+      );
+      send({
+        success: false,
+        error: "invalid_lecture_data",
+        lecture_id: lectureId,
+        details: z.treeifyError(validation.error),
+      });
+      ws.close();
+      return;
+    }
+
     // Move to ready state
     state = {
       phase: "ready",
@@ -68,11 +91,8 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
       // lectureData,
     };
 
-    // Send initial lecture snapshot back to client
-    send({
-      type: "get_lecture_response",
-      lecture: lectureData,
-    } satisfies GetLectureResponse);
+    // Send validated lecture snapshot back to client
+    send(validation.data);
   }
 
   async function handleUserInitiatedRequest(msg: UserQuestionRequest) {

@@ -165,7 +165,7 @@ function useLectureChannel(lectureId: string): UseLectureChannelReturn {
     const questionMessage = {
       type: 'user_question_request' as const,
       lecture_id: lectureId,
-      slide,
+      current_slide: slide,
       question,
     };
 
