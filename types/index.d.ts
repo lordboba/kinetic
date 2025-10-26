@@ -20,15 +20,6 @@ type LecturePreferences = {
   //   reference_youtuber: "3Blue1Brown" | "Crash Course" | "Veritasium";
 };
 
-type UserProfile = {
-  uid: string;
-  email: string;
-  displayName?: string;
-  preferences: LecturePreferences;
-  createdAt: number;
-  updatedAt: number;
-};
-
 type LectureSlide = {
   transcript: string;
   voiceover: string; // download URL; refers to audio in firebase/storage
@@ -48,8 +39,13 @@ type Lecture = {
 };
 
 type User = {
-  user_preferences: LecturePreferences;
-  lectures: Lecture[]; // by lecture.id or just uuid[]
+  lectures: string[]; // by lecture.id or just uuid[]
+  uid: string;
+  email: string;
+  displayName?: string;
+  preferences: LecturePreferences;
+  createdAt: number;
+  updatedAt: number;
 };
 
 /// REQUESTS ///
