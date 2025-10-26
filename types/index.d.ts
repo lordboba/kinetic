@@ -125,9 +125,7 @@ type UserInitiatedQuestionRequest = {
   user_id: Uuid;
   lecture_id: Uuid;
   lecture_version: number;
-  timestamp: number; // # secs into slide voicover
   slide: number;
-  cursor: number; // # words into slide voiceover
   question: string;
 };
 
@@ -148,6 +146,7 @@ type BackendInitiatedQuestionRequest = {
   lecture_version: number;
   slide: number;
   question: string;
+  user_answer: string; 
 };
 
 // User responds to check-in question
