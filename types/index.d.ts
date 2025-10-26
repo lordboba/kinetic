@@ -27,6 +27,7 @@ type LectureSlide = {
   content?: string; // narrow: bullet points?
   diagram?: Diagram;
   image?: string; // url
+  question?: string
 };
 
 type PartialSlide = Omit<LectureSlide, "transcript" | "voiceover">;
@@ -105,16 +106,19 @@ type CreateLectureStatusUpdate =
       type: "completedAll";
     }
   | {
+    // sent once 
       type: "completedOne";
       // "transcript" includes slide transcript, title, md content
       completed: "transcript";
     }
   | {
+    // sent continuously 
       type: "completedOne";
       completed: "images" | "tts" | "diagrams";
       counter: number;
     }
   | {
+    // returns total number 
       type: "enumerated";
       thing: "images" | "diagrams" | "tts";
       total: number;

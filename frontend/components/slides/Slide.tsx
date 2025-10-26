@@ -6,10 +6,10 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import mermaid from 'mermaid';
-import type { PartialSlide } from 'schema';
+import type { LectureSlide } from 'schema';
 
 interface SlideProps {
-  lectureSlides: PartialSlide[];
+  lectureSlides: LectureSlide[];
   i: number;
 }
 
