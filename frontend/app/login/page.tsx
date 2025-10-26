@@ -147,7 +147,16 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6">
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="bg-white px-4 text-slate-900 font-medium">or</span>
+          </div>
+        </div>
+
+        <div>
           <button
             type="button"
             onClick={handleGoogle}

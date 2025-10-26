@@ -57,7 +57,7 @@ function ClarifyingQuestionCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-sm font-semibold uppercase tracking-wide text-primary">
             Instructor follow-up
           </p>
           <h3 className="mt-2 text-lg font-semibold text-slate-900">
@@ -81,14 +81,14 @@ function ClarifyingQuestionCard({
                 onClick={() => onChange(option.option_id)}
                 className={`flex h-full flex-col items-start rounded-xl border px-4 py-3 text-left transition ${
                   isSelected
-                    ? "border-slate-900 bg-slate-900 text-white shadow"
+                    ? "border-sky-600 bg-sky-50 text-sky-700 shadow"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                 }`}
               >
                 <span className="text-sm font-medium">{option.text}</span>
                 {isSelected ? (
-                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-white">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     Selected
                   </span>
                 ) : null}
@@ -115,7 +115,7 @@ function ClarifyingQuestionCard({
                 }}
                 className={`flex h-full flex-col rounded-xl border px-4 py-3 text-left transition ${
                   isSelected
-                    ? "border-slate-900 bg-slate-900 text-white shadow"
+                    ? "border-sky-600 bg-sky-50 text-sky-700 shadow"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                 }`}
               >
@@ -124,7 +124,7 @@ function ClarifyingQuestionCard({
                   <span
                     className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs transition ${
                       isSelected
-                        ? "border-transparent bg-white/20 text-white"
+                        ? "border-transparent bg-sky-600 text-white"
                         : "border-slate-300 bg-white text-slate-500"
                     }`}
                   >
