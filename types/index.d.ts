@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 type FileUpload = {
   name: string;
   content: string;
@@ -25,6 +27,7 @@ export const ZLectureSlide = z.object({
 
 export const ZLecture = z.object({
   version: z.number(),
+  topic: z.string(),
   permitted_users: z.array(z.string()),
   slides: z.array(ZLectureSlide),
 });
@@ -32,7 +35,10 @@ export const ZLecture = z.object({
 // Inferred TypeScript types (optional)
 export type LectureSlide = z.infer<typeof ZLectureSlide>;
 export type Lecture = z.infer<typeof ZLecture>;
-export type PartialSlide = Omit<LectureSlide, "transcript" | "audio_transcription_link">;
+export type PartialSlide = Omit<
+  LectureSlide,
+  "transcript" | "audio_transcription_link"
+>;
 
 type User = {
   lectures: string[]; // by lecture.id or just uuid[]
@@ -86,6 +92,7 @@ type CreateLectureInitialResponse = {
 type CreateLectureMainRequest = {
   lecture_id: string;
   answers: CreateLectureAnswer[];
+  augment_slides_instructions?: string;
 };
 
 // everything below here will be sent over ws //

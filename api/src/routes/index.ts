@@ -5,29 +5,36 @@ import {
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
 import { LectureStore } from "../lib/lecture-store.js";
-import { create_lecture_initial, create_lecture_main } from "./create_lecture.js";
+import {
+  create_lecture_initial,
+  create_lecture_main,
+} from "./create_lecture.js";
 import { verify_firebase_token } from "../middleware/firebase.js";
 import {
   get_profile_handler,
   update_preferences_handler,
   create_profile_handler,
 } from "./user_profile.js";
-// added for S7 lecture gen 
-import { get_lecture_ws } from "./get_lecture.js";
+// added for S7 lecture gen
+import { watch_lecture } from "./watch_lecture.js";
 
 // HTTP handler for WebSocket-only lecture endpoint
 const createLectureHttpHandler = (): RouteHandler => {
   return async (request, reply) => {
     // If this is a WebSocket upgrade, let it proceed
     const upgradeHeader = request.headers?.upgrade;
-    if (typeof upgradeHeader === 'string' && upgradeHeader.toLowerCase() === 'websocket') {
+    if (
+      typeof upgradeHeader === "string" &&
+      upgradeHeader.toLowerCase() === "websocket"
+    ) {
       return;
     }
 
     // Otherwise, reject non-WebSocket HTTP requests
     reply.code(426).send({
-      error: 'upgrade_required',
-      message: 'Connect to this endpoint via WebSocket to generate a lecture. Include the lecture_id and answers as query parameters.',
+      error: "upgrade_required",
+      message:
+        "Connect to this endpoint via WebSocket to generate a lecture. Include the lecture_id and answers as query parameters.",
     });
   };
 };
@@ -111,6 +118,14 @@ export function registerRoutes(
     preHandler: verify_firebase_token,
     handler: createLectureHttpHandler(),
     wsHandler: create_lecture_main,
+  });
+
+  app.route({
+    method: "GET",
+    url: "/api/watch_lecture",
+    preHandler: verify_firebase_token,
+    handler: createLectureHttpHandler(),
+    wsHandler: watch_lecture,
   });
 
   app.route({

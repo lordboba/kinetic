@@ -15,7 +15,8 @@ export async function verify_firebase_token(
   // Check if this is a WebSocket upgrade request
   const upgradeHeader = req.headers?.upgrade;
   const isWebSocket =
-    typeof upgradeHeader === 'string' && upgradeHeader.toLowerCase() === 'websocket';
+    typeof upgradeHeader === "string" &&
+    upgradeHeader.toLowerCase() === "websocket";
 
   let idToken: string | undefined;
 
@@ -27,9 +28,9 @@ export async function verify_firebase_token(
 
   // For WebSocket connections, check query parameter as fallback
   // (browsers cannot set custom headers on WebSocket connections)
-  if (!idToken && req.query && typeof req.query === 'object') {
+  if (!idToken && req.query && typeof req.query === "object") {
     const query = req.query as Record<string, unknown>;
-    if (typeof query.token === 'string') {
+    if (typeof query.token === "string") {
       idToken = query.token;
     }
   }
@@ -77,9 +78,9 @@ export async function verify_websocket_token(
   }
 
   // For WebSocket connections, check query parameter
-  if (!idToken && req.query && typeof req.query === 'object') {
+  if (!idToken && req.query && typeof req.query === "object") {
     const query = req.query as Record<string, unknown>;
-    if (typeof query.token === 'string') {
+    if (typeof query.token === "string") {
       idToken = query.token;
     }
   }

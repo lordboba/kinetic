@@ -18,6 +18,7 @@ export type GenerateTranscriptRequest = {
 
 // validates AI's response structure (Anthropic tool schemas must be objects)
 export const ZGenerateTranscriptResponse = z.object({
+  topic: z.string(),
   slides: z.array(
     z.object({
       transcript: z.string(),
@@ -58,7 +59,9 @@ export const ZGenerateTranscriptResponse = z.object({
 });
 
 if (!(ZGenerateTranscriptResponse instanceof z.ZodObject)) {
-  console.warn("[LectureGen] Transcript schema should be a ZodObject for tool usage.");
+  console.warn(
+    "[LectureGen] Transcript schema should be a ZodObject for tool usage."
+  );
 }
 
 // converts Q&A pairs into readable text format
@@ -76,7 +79,7 @@ const question_answer_to_text = (
       qn_type = "Open Ended";
   }
   let acc = new StringAccumulator(`${qn_type} Q: ${question.question}`);
-  if (question.question_type != "text_input") {
+  if (question.question_type !== "text_input") {
     acc.add("Possible options:");
     for (const opt of question.options) {
       acc.add(opt.text);
@@ -88,7 +91,8 @@ const question_answer_to_text = (
 
 export async function generate_transcript(
   llm: LLM,
-  generate_transcript_request: GenerateTranscriptRequest
+  generate_transcript_request: GenerateTranscriptRequest,
+  augment_slides_instructions?: string
 ) {
   const {
     lecture_topic,
@@ -107,7 +111,7 @@ export async function generate_transcript(
   // debug_assert_eq(questions.len(), answers.len())
 
   const PROMPT = `
-You are an expert lecturer being asked to lecture on the following: ${lecture_topic}.
+${augment_slides_instructions ? `You are an expert lecturer being asked to adjust your lecture lecture on the following: ${lecture_topic}.` + augment_slides_instructions : `You are an expert lecturer being asked to lecture on the following: ${lecture_topic}.`}
 You have asked the following clarifying questions and have been given the following answers:
 
 ${questions.map((qn, qidx) => question_answer_to_text(qn, answers[qidx])).join("\n\n")}
@@ -119,7 +123,7 @@ ${file_uploads.map((u) => `**${u.name}**\n${u.content}`)}
 Please generate a response as follows:
 Each item in the returned lecture should represent a single **slide** in a lecture-style presentation. The \`transcript\` field corresponds to the spoken narration or written content that would appear on that slide. The \`slide\` field must contain a \`title\` for the slide and a \`markdown_body\` with the Markdown content that should be shown (4-6 bullet points or concise lines). Optional \`image\`, \`diagram\`, and \`question\` fields should be used only when they enhance the educational value of that specific slide. The goal is to produce a structured lecture that could be seamlessly rendered into a sequence of slides, each containing its own transcript (and optionally a visual or question) as teaching material.
 
-Return a JSON object with a top-level \`slides\` array. Each element inside \`slides\` must be an object with the following structure:
+Return a JSON object with a top-level \`slides\` array and a \`topic\` field. The \`topic\` field should be a short title for the presentation. Each element inside \`slides\` must be an object with the following structure:
 {
   "transcript": string, // REQUIRED, plain text transcript for this segment
   "slide": { // REQUIRED
@@ -141,6 +145,7 @@ Return a JSON object with a top-level \`slides\` array. Each element inside \`sl
 }
 
 Please adhere to the following guidelines:
+- \`topic\` is **always required**.
 - \`transcript\` is **always required**.
 - The nested \`slide\` object and its subfields are **always required**.
 - \`question\` is **optional**. Include it only if this part of the transcript naturally invites an in-lecture check-for-understanding. If included, it must contain both \`question_text\` and \`suggested_answer\`.

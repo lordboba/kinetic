@@ -30,7 +30,7 @@ try {
 const resolvedProjectId =
   process.env.FIREBASE_PROJECT_ID ??
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
-  serviceAccount?.project_id;
+  serviceAccount?.projectId;
 
 const resolvedStorageBucket =
   process.env.FIREBASE_STORAGE_BUCKET ??

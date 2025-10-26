@@ -121,7 +121,7 @@ ${
   ))! as { questions: Partial<CreateLectureQuestion>[] };
   result.questions.forEach((q) => {
     q.question_id = crypto.randomUUID();
-    if (q.question_type == "checkbox" || q.question_type == "radio") {
+    if (q.question_type === "checkbox" || q.question_type === "radio") {
       q.options!.forEach((opt) => (opt.option_id = crypto.randomUUID()));
     }
   });

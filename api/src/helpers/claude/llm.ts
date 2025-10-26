@@ -18,7 +18,7 @@ export class LLM {
   constructor(apiKey: string, model = "claude-sonnet-4-5", maxTokens = 4096) {
     if (!apiKey || apiKey.trim().length === 0) {
       throw new Error(
-        "Anthropic API key is missing. Set ANTHROPIC_API_KEY in the environment.",
+        "Anthropic API key is missing. Set ANTHROPIC_API_KEY in the environment."
       );
     }
 
@@ -48,7 +48,7 @@ export class LLM {
       tool_choice: { name: "json", type: "tool" as const },
     });
 
-    const contentBlock = response.content.find((c) => c.type == "tool_use");
+    const contentBlock = response.content.find((c) => c.type === "tool_use");
     const result = schema.safeParse(contentBlock?.input);
     return result.data as z.infer<T>;
   }
