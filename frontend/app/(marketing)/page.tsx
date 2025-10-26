@@ -40,7 +40,7 @@ const deliveryFlow = [
   {
     title: "POST /api/newLecture",
     description:
-      "Submit a topic to stitch together transcript, slides, diagrams, and a voiceover pipeline.",
+      "Creates a new lecture item and starts by asking clarification questions before the lecture is generated.",
   },
   {
     title: "WS /api/lecture",

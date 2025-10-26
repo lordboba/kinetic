@@ -31,10 +31,17 @@ We let learners assemble their own lecture format by mixing content blocks (expl
 ## Environment Variables
 - `BACKEND_ENDPOINT`: Base URL for Fastify APIs (e.g. `https://api.lecturegen.dev/api/`). Client code reads this value (or `NEXT_PUBLIC_BACKEND_ENDPOINT`) to avoid hardcoding localhost addresses.
 
-### API Surface
-- `POST /api/newLecture { topic } → { id }` creates a lecture job and returns its identifier.
-- `WS /api/lecture?id={id}` streams progress updates (`transcript complete`, `slides complete`, `diagrams complete`, `voiceover complete`) as each asset becomes available. This is the same input used to interrupt and ask questions during the lecture.
-- `GET /api/lecture?id={id}&asset={transcript|slide|voiceover|diagram}` fetches generated lecture artifacts once marked complete.
+### API Surface (Current)
+- `GET /api/tts`  
+  - HTTP: returns 426 (upgrade required).  
+  - WebSocket: accepts a JSON payload `{ type?: "synthesize", text, voice?, language?, model? }` and responds with `tts.result` events from LiveKit’s TTS helper.
+- `GET /api/lecture`  
+  - HTTP: returns 501 (placeholder until lecture asset retrieval is implemented).  
+  - WebSocket: immediately closes with code `1011` (stream handler not wired up yet).
+
+> TODO endpoints (not yet implemented in the codebase):  
+> • `POST /api/newLecture` — Creates a new lecture item and begins with clarifying questions before generation continues.  
+> • WebSocket progress streaming + asset retrieval once the lecture orchestration loop lands.
 
 ### Diagram Generation Strategies
 - Web search via Google Images for illustrative references.
