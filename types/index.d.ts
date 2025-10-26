@@ -29,6 +29,8 @@ type LectureSlide = {
   image?: string; // url
 };
 
+type PartialSlide = Omit<LectureSlide,"transcript" | "voiceover">
+
 type Lecture = {
   version: number; // race condition: account for case where user sends new request before prev finishes
   // share lecture -> ensure only registered users can access

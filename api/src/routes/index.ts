@@ -1,10 +1,31 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, RouteHandler } from "fastify";
 import fastifyMultipart from "@fastify/multipart";
 import {
   createTtsHttpHandler,
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
 import { LectureStore } from "../lib/lecture-store.js";
+import type { WebsocketHandler } from "@fastify/websocket";
+
+const createLectureAssetHandler = (
+  _lectureStore: LectureStore,
+): RouteHandler => {
+  return async (_request, reply) => {
+    reply.code(501).send({
+      error: "not_implemented",
+      message:
+        "Lecture asset retrieval is not yet implemented. TODO: wire up createLectureAssetHandler.",
+    });
+  };
+};
+
+const createLectureStreamHandler = (
+  _lectureStore: LectureStore,
+): WebsocketHandler => {
+  return (socket) => {
+    socket.close(1011, "Lecture stream handler not yet connected.");
+  };
+};
 
 export function registerRoutes(
   app: FastifyInstance,

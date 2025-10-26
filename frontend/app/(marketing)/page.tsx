@@ -40,7 +40,7 @@ const deliveryFlow = [
   {
     title: "POST /api/newLecture",
     description:
-      "Submit a topic to stitch together transcript, slides, diagrams, and a voiceover pipeline.",
+      "Creates a new lecture item and starts by asking clarification questions before the lecture is generated.",
   },
   {
     title: "WS /api/lecture",
@@ -198,56 +198,16 @@ export default function Home() {
               <h3 className="text-lg font-semibold">Diagram generation</h3>
               <p className="mt-3 text-sm text-slate-200">
                 Blend Google Images, NotesGPT, DiagramGPT, and on-the-fly
-                Mermaid rendering to visualize complex concepts instantly.
+                Mermaid diagrams so visuals stay in sync with the lesson arc.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20">
-        <div className="max-w-2xl">
-          <h2 className="text-3xl font-semibold">Accessibility matters</h2>
-          <p className="mt-4 text-lg text-slate-600">
-            Personalized pacing, modality options, and adaptive scaffolding help
-            neurodiverse learners and those with limited access to traditional
-            instruction stay engaged and absorb material more effectively.
-          </p>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <p className="text-lg font-medium text-slate-900">
-            “Lecture Gen feels like having a professor and TA who already know
-            how I learn. I can read, listen, or watch at my pace—and jump back
-            in with questions anytime.”
-          </p>
-          <p className="mt-4 text-sm text-slate-500">
-            — Early pilot participant, Accessibility Lab
-          </p>
-        </div>
-      </section>
-
-      <section className="bg-slate-100 py-20">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-6 text-center">
-          <h2 className="text-3xl font-semibold text-slate-900">
-            Ready to assemble your first adaptive lecture?
-          </h2>
-          <p className="max-w-2xl text-lg text-slate-600">
-            Start with a topic, choose your preferred modalities, and let our AI
-            instructor + TA duo build the experience in real time.
-          </p>
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <Link
-              href="/lectures"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-            >
-              Browse lecture templates
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-400"
-            >
-              Sign in to customize
-            </Link>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+              <h3 className="text-lg font-semibold">Structured outputs</h3>
+              <p className="mt-3 text-sm text-slate-200">
+                Every asset is generated with rich metadata so you can remix,
+                reorder, or export the lecture to your LMS.
+              </p>
+            </div>
           </div>
         </div>
       </section>
