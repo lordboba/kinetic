@@ -78,7 +78,7 @@ export async function update_preferences_handler(
       return reply.code(400).send({
         success: false,
         error: "Invalid request body",
-        details: error.errors,
+        details: error.issues,
       });
     }
 
@@ -130,7 +130,7 @@ export async function create_profile_handler(
       return reply.code(400).send({
         success: false,
         error: "Invalid request body",
-        details: error.errors,
+        details: error.issues,
       });
     }
 

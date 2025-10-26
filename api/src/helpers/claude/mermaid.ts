@@ -3,7 +3,16 @@ import { LLM } from "./llm.js";
 
 // input needed to generate mermaid diagram
 export type GenerateMermaidRequest = {
-  type: string;
+  type:
+    | "flowchart-LR"
+    | "flowchart-RL"
+    | "flowchart-TB"
+    | "flowchart-BT"
+    | "sequenceDiagram"
+    | "classDiagram"
+    | "stateDiagram-v2"
+    | "erDiagram"
+    | "pie";
   extended_description: string;
   // slide_num: number; Sad face.
 };

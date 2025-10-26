@@ -24,7 +24,7 @@ const DEFAULT_VOICE = process.env.LIVEKIT_DEFAULT_VOICE ?? '248be419-c632-4f23-a
 
 export async function generateAvatarSpeech(
   text: string,
-  options: GenerateAvatarSpeechOptions = {},
+  options: GenerateAvatarSpeechOptions = { format: 'wav' },
 ): Promise<GenerateAvatarSpeechResult> {
   // eslint-disable-next-line no-console
   console.log('[TTS-Wrapper] generateAvatarSpeech called with:', {
@@ -48,8 +48,8 @@ export async function generateAvatarSpeech(
   const synthesisPayload = {
     text: normalized,
     voice: options.voice ?? DEFAULT_VOICE,
-    format: options.format,
-    language: options.language,
+    format: options.format ?? 'wav',
+    language: options.language ?? 'en',
     avatar: options.avatar,
     metadata: options.metadata,
     model: options.model,
@@ -101,6 +101,9 @@ async function triggerCliRun(args: string[]): Promise<void> {
       case 'language':
         acc.language = value;
         break;
+      case 'format':
+        acc.format = value as 'mp3' | 'wav' | 'ogg';
+        break;
       case 'model':
         acc.model = value;
         break;
@@ -109,7 +112,7 @@ async function triggerCliRun(args: string[]): Promise<void> {
     }
 
     return acc;
-  }, {});
+  }, { format: 'wav' });
 
   const result = await generateAvatarSpeech(inputText, options);
   // eslint-disable-next-line no-console

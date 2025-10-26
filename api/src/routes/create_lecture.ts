@@ -28,7 +28,7 @@ import {
 import { llm, haikuLlm } from "../lib/mouse";
 import { WebsocketHandler } from "@fastify/websocket";
 import { generate_transcript } from "../helpers/claude/transcript";
-import { generateMermaidDiagrams } from "../helpers/claude/mermaid";
+import { generateMermaidDiagrams, type GenerateMermaidRequest } from "../helpers/claude/mermaid";
 import { getImageForKeyword } from "../helpers/image";
 import { generateAvatarSpeech } from "../helpers/livekit/tts";
 import { stripUndefinedDeep } from "../lib/firestore_sanitize";
@@ -395,9 +395,9 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
 
   const diagramTasks = ts
     .map((s, sidx) => ({ s, sidx }))
-    .filter(({ s }) => s.diagram !== undefined)
+    .filter(({ s }) => s.diagram !== undefined && s.diagram.type !== undefined)
     .map(({ s, sidx }) =>
-      generateMermaidDiagrams(llm, s.diagram!).then((dg) => {
+      generateMermaidDiagrams(llm, s.diagram! as GenerateMermaidRequest).then((dg) => {
         lec.slides![sidx].diagram = dg;
         const currentCount = ++completedDiagramCount;
         req.log.info(
@@ -456,6 +456,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
 
   const voiceoverTasks = ts.map((s, sidx) =>
     generateAvatarSpeech(s.transcript, {
+      format: "wav",
       metadata: {
         lectureId: lecture_id,
         slideIndex: sidx,

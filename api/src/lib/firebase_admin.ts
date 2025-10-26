@@ -6,6 +6,7 @@ import {
   Firestore,
   getFirestore,
 } from "firebase-admin/firestore";
+// import type { Bucket } from "@google-cloud/storage";
 import fs from "node:fs";
 import path from "node:path";
 import { Lecture, LecturePreferences, User } from "schema";
@@ -143,6 +144,6 @@ export async function update_user_preferences(
 
 export { admin, db };
 export const storageBucketName = resolvedStorageBucket;
-export function getDefaultStorageBucket() {
+export function getDefaultStorageBucket(): any {
   return admin.storage().bucket(resolvedStorageBucket);
 }
