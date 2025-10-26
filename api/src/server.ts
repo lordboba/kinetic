@@ -16,23 +16,21 @@ if (result.error) {
   console.log(`[server] .env loaded successfully`);
 }
 
+// Use dynamic imports to ensure environment variables are loaded first
 import cors from "@fastify/cors";
 import websocketPlugin from "@fastify/websocket";
 import Fastify from "fastify";
 
-import { LectureStore } from "./lib/lecture-store.js";
-import { registerRoutes } from "./routes/index.js";
-import { LLM } from "./helpers/claude/llm.js";
-
 declare module "fastify" {
   interface FastifyInstance {
-    llm: LLM;
+    llm: any;
   }
 }
 
-const lectureStore = new LectureStore();
-
 async function main(): Promise<void> {
+  // Dynamic imports after dotenv loads
+  const { registerRoutes } = await import("./routes/index.js");
+
   const app = Fastify({
     logger: process.env.NODE_ENV !== "production",
   });
@@ -42,7 +40,7 @@ async function main(): Promise<void> {
   });
 
   await app.register(websocketPlugin);
-  registerRoutes(app, lectureStore);
+  registerRoutes(app);
 
   const port = Number.parseInt(process.env.PORT ?? "4000", 10);
   const host = process.env.HOST ?? "0.0.0.0";

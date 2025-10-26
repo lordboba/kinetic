@@ -4,7 +4,6 @@ import {
   createTtsHttpHandler,
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
-import { LectureStore } from "../lib/lecture-store.js";
 import {
   create_lecture_initial,
   create_lecture_main,
@@ -44,8 +43,7 @@ const createLectureHttpHandler = (): RouteHandler => {
 // which fetches and sends complete Lecture data from Firebase
 
 export function registerRoutes(
-  app: FastifyInstance,
-  _lectureStore: LectureStore
+  app: FastifyInstance
 ): void {
   const MAX_RESPONSE_LOG_BYTES = 1024 * 16;
 
