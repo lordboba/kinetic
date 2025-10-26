@@ -5,3 +5,4 @@ node_modules/
 **/.env
 @test-outputs/
 service-account-key.json
+**/.debug
