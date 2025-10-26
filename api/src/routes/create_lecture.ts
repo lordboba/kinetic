@@ -1,5 +1,5 @@
 import { RouteHandler } from "fastify";
-import { CreateLectureUploadSchema } from "schema/zod_types";
+import { CreateLectureUploadSchema } from "../schemas/create-lecture.js";
 import { buildFileUploadsForLLM } from "../helpers/file";
 import { ASSET_CACHE } from "../lib/file_cache";
 import * as z from "zod";

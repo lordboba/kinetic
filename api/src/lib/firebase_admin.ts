@@ -6,11 +6,34 @@ import {
   Firestore,
   getFirestore,
 } from "firebase-admin/firestore";
+import fs from "node:fs";
+import path from "node:path";
 import { Lecture, LecturePreferences } from "schema";
 
-const serviceAccount = {};
+const serviceAccountPath =
+  process.env.FIREBASE_SERVICE_ACCOUNT_PATH ??
+  path.resolve(process.cwd(), "service-account-key.json");
+
+let serviceAccount: admin.ServiceAccount | undefined;
+
+try {
+  const file = fs.readFileSync(serviceAccountPath, "utf-8");
+  serviceAccount = JSON.parse(file) as admin.ServiceAccount;
+} catch (error) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[firebase-admin] Failed to load service account JSON:",
+    error instanceof Error ? error.message : error,
+  );
+}
 
 if (!admin.apps.length) {
+  if (!serviceAccount) {
+    throw new Error(
+      "Firebase admin service account is missing. Provide service-account-key.json or set FIREBASE_SERVICE_ACCOUNT_PATH.",
+    );
+  }
+
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
