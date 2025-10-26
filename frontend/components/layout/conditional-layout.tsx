@@ -7,7 +7,7 @@ import { SiteHeader } from '@/components/layout/site-header';
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  const workspacePrefixes = ['/dashboard', '/lectures/new'];
+  const workspacePrefixes = ['/dashboard', '/lectures/new', '/settings'];
   const isWorkspace = workspacePrefixes.some((prefix) =>
     pathname.startsWith(prefix),
   );
