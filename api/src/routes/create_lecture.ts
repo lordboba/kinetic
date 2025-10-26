@@ -25,7 +25,7 @@ import {
   ZGenerateClarifyingQuestionsRequest,
   generate_clarifying_questions,
 } from "../helpers/claude/clarifying_questions";
-import { llm } from "../lib/mouse";
+import { llm, haikuLlm } from "../lib/mouse";
 import { WebsocketHandler } from "@fastify/websocket";
 import { generate_transcript } from "../helpers/claude/transcript";
 import { generateMermaidDiagrams } from "../helpers/claude/mermaid";
@@ -194,7 +194,10 @@ export const create_lecture_initial: RouteHandler = async (req, res) => {
   });
 
   const stub = await create_lecture_stub(uid, userPreferences);
-  const questions = await generate_clarifying_questions(llm, clarifyingRequest);
+  const questions = await generate_clarifying_questions(
+    haikuLlm,
+    clarifyingRequest
+  );
 
   ASSET_CACHE.set(stub, {
     uid,
