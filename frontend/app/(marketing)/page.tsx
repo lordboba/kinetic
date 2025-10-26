@@ -57,33 +57,27 @@ const deliveryFlow = [
 export default function Home() {
   return (
     <div className="bg-white text-slate-900">
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-accent text-white">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-24 sm:py-28">
           <div className="max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-widest text-sky-300">
-              Personalized lectures, on demand
-            </p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-              Build adaptive lecture experiences that match every learner’s
-              brain.
+            
+            <h1 className="mt-4 text-5xl font-bold tracking-tight sm:text-9xl">
+              Meet Blazz.
             </h1>
-            <p className="mt-6 text-lg leading-relaxed text-slate-100/90 sm:text-xl">
-              Lecture Gen transforms static syllabi into interactive, multimodal
-              journeys. Learners assemble the format they want, while an AI
-              instructor + TA duo delivers scaffolding, practice prompts, and
-              realtime support.
+            <p className="mt-8 text-sm font-semibold uppercase tracking-widest text-white sm:text-2xl">
+              Your study companion, powered by AI.
+            </p>
+            <p className="mt-2 text-lg leading-relaxed text-slate-100/90 sm:text-xl">
+              
+              Personalized lectures that adapt to how you learn—perfect for review, 
+catching up, or mastering tough concepts.
             </p>
           </div>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <Link
-              href="/lectures"
-              className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100"
-            >
-              Preview the lecture experience
-            </Link>
+            
             <Link
               href="/login"
-              className="inline-flex items-center justify-center rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white transition hover:border-white hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold !text-primary border border-transparent transition hover:!border-white hover:!bg-transparent hover:!text-white"
             >
               Sign in to craft your flow
             </Link>
