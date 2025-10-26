@@ -13,120 +13,10 @@ import { CreateLectureQuestion } from "schema";
 import { getBackendEndpoint } from "@/lib/env";
 import { useAuth } from "@/components/auth/auth-provider";
 
-type QuestionType = "text" | "textarea" | "choice";
-
-type QuestionOption = {
-  value: string;
-  label: string;
-  description?: string;
-};
-
-type Question = {
-  id: string;
-  label: string;
-  helper?: string;
-  placeholder?: string;
-  type: QuestionType;
-  options?: QuestionOption[];
-};
-
-type QuestionGroup = {
-  id: string;
-  title: string;
-  description: string;
-  questions: Question[];
-};
-
-const questionGroups: QuestionGroup[] = [
-  {
-    id: "topic-blueprint",
-    title: "Topic Blueprint",
-    description:
-      "Give the instructor duo a sense of the lecture’s direction and the moments that must land.",
-    questions: [
-      {
-        id: "key-takeaways",
-        label: "List 3 key takeaways learners should remember.",
-        helper: "Bullet points are welcome—pretend the TA is taking notes.",
-        type: "textarea",
-        placeholder:
-          "• Learners can explain the gradient descent update rule\n• …",
-      },
-    ],
-  },
-  {
-    id: "audience-context",
-    title: "Audience & Modality",
-    description:
-      "Share context about who will listen in, so pacing and scaffolding feel right-sized.",
-    questions: [
-      {
-        id: "audience-profile",
-        label: "Who is the primary audience?",
-        type: "textarea",
-        placeholder:
-          "e.g. Bootcamp cohort familiar with JavaScript but new to ML concepts.",
-      },
-      {
-        id: "preferred-delivery",
-        label: "Preferred delivery emphasis",
-        type: "choice",
-        options: [
-          {
-            value: "visual-heavy",
-            label: "Visual heavy",
-            description: "Slide-forward with diagram-first explanations.",
-          },
-          {
-            value: "audio-guided",
-            label: "Audio guided",
-            description: "Narration-led with supporting visuals as needed.",
-          },
-          {
-            value: "code-first",
-            label: "Code first",
-            description: "Walk through code demos with annotations.",
-          },
-        ],
-      },
-      {
-        id: "access-needs",
-        label: "Any accessibility or pacing needs?",
-        type: "textarea",
-        placeholder:
-          "e.g. Include transcripts, allow frequent pauses, emphasize real-world metaphors…",
-      },
-    ],
-  },
-  {
-    id: "practice-path",
-    title: "Practice Path",
-    description:
-      "Outline how the TA agent should challenge learners once the concepts land.",
-    questions: [
-      {
-        id: "practice-prompts",
-        label: "Describe the kind of practice prompts to include.",
-        type: "textarea",
-        placeholder:
-          "e.g. Two short answer checks + one open-ended synthesis question.",
-      },
-      {
-        id: "confidence-level",
-        label: "How confident is the audience on this topic today?",
-        type: "choice",
-        options: [
-          { value: "just-exploring", label: "Just exploring" },
-          { value: "some-experience", label: "Some experience" },
-          { value: "deep-dive", label: "Ready for a deep dive" },
-        ],
-      },
-    ],
-  },
-];
-
 type AnswersState = Record<string, string>;
-type ClarifyingAnswersState = Record<string, string | string[]>;
+type ClarifyingAnswerValue = string | string[];
+type ClarifyingAnswersState = Record<string, ClarifyingAnswerValue>;
+
 type StoredLectureConfig = {
   baseAnswers: AnswersState;
   clarifyingAnswers: ClarifyingAnswersState;
@@ -135,110 +25,125 @@ type StoredLectureConfig = {
   createdAt: string;
 };
 
-function buildInitialAnswers(groups: QuestionGroup[]): AnswersState {
-  const answers = groups.reduce<AnswersState>((acc, group) => {
-    group.questions.forEach((question) => {
-      acc[question.id] = "";
-    });
-    return acc;
-  }, {});
-
-  answers["lecture-topic"] = "";
-  return answers;
+function buildInitialAnswers(): AnswersState {
+  return { "lecture-topic": "" };
 }
 
-type QuestionFieldProps = {
-  question: Question;
-  value: string;
-  onChange: (value: string) => void;
-  onFocus: () => void;
-  isActive: boolean;
+type ClarifyingQuestionCardProps = {
+  question: CreateLectureQuestion;
+  value: ClarifyingAnswerValue | undefined;
+  onChange: (value: ClarifyingAnswerValue) => void;
 };
 
-function QuestionField({
+function ClarifyingQuestionCard({
   question,
   value,
   onChange,
-  onFocus,
-  isActive,
-}: QuestionFieldProps) {
-  const sharedLabelStyles =
-    "flex items-center justify-between text-sm font-medium text-slate-700";
+}: ClarifyingQuestionCardProps) {
+  const isAnswered =
+    question.question_type === "checkbox"
+      ? Array.isArray(value) && value.length > 0
+      : typeof value === "string" && value.trim().length > 0;
 
   return (
     <div
       className={`rounded-2xl border p-6 transition ${
-        isActive
+        isAnswered
           ? "border-slate-900 shadow-lg shadow-slate-900/5"
           : "border-slate-200 hover:border-slate-300"
       }`}
     >
-      <label htmlFor={question.id} className={sharedLabelStyles}>
-        <span>{question.label}</span>
-        {question.type !== "choice" && (
-          <span className="text-xs font-normal text-slate-400">
-            {(value?.length ?? 0) > 0 ? "Captured" : "Pending"}
-          </span>
-        )}
-      </label>
-      {question.helper ? (
-        <p className="mt-2 text-xs text-slate-500">{question.helper}</p>
-      ) : null}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Instructor follow-up
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-slate-900">
+            {question.question}
+          </h3>
+        </div>
+        <span className="text-xs font-medium text-slate-400">
+          {isAnswered ? "Captured" : "Pending"}
+        </span>
+      </div>
 
-      {question.type === "text" ? (
-        <input
-          id={question.id}
-          type="text"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocus}
-          placeholder={question.placeholder}
-          className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-        />
-      ) : null}
-
-      {question.type === "textarea" ? (
-        <textarea
-          id={question.id}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onFocus={onFocus}
-          placeholder={question.placeholder}
-          rows={5}
-          className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-        />
-      ) : null}
-
-      {question.type === "choice" && question.options ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      {question.question_type === "radio" && question.options ? (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
           {question.options.map((option) => {
-            const isSelected = value === option.value;
+            const isSelected =
+              typeof value === "string" && value === option.option_id;
             return (
               <button
-                key={option.value}
+                key={option.option_id}
                 type="button"
-                onClick={() => onChange(option.value)}
-                onFocus={onFocus}
-                className={`flex h-full flex-col rounded-xl border px-4 py-3 text-left transition ${
+                onClick={() => onChange(option.option_id)}
+                className={`flex h-full flex-col items-start rounded-xl border px-4 py-3 text-left transition ${
                   isSelected
                     ? "border-slate-900 bg-slate-900 text-white shadow"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                 }`}
               >
-                <span className="text-sm font-medium">{option.label}</span>
-                {option.description ? (
-                  <span
-                    className={`mt-2 text-xs ${
-                      isSelected ? "text-white/80" : "text-slate-500"
-                    }`}
-                  >
-                    {option.description}
+                <span className="text-sm font-medium">{option.text}</span>
+                {isSelected ? (
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-white">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    Selected
                   </span>
                 ) : null}
               </button>
             );
           })}
         </div>
+      ) : null}
+
+      {question.question_type === "checkbox" && question.options ? (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {question.options.map((option) => {
+            const currentValue = Array.isArray(value) ? value : [];
+            const isSelected = currentValue.includes(option.option_id);
+            return (
+              <button
+                key={option.option_id}
+                type="button"
+                onClick={() => {
+                  const nextValue = isSelected
+                    ? currentValue.filter((id) => id !== option.option_id)
+                    : [...currentValue, option.option_id];
+                  onChange(nextValue);
+                }}
+                className={`flex h-full flex-col rounded-xl border px-4 py-3 text-left transition ${
+                  isSelected
+                    ? "border-slate-900 bg-slate-900 text-white shadow"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-sm font-medium">{option.text}</span>
+                  <span
+                    className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs transition ${
+                      isSelected
+                        ? "border-transparent bg-white/20 text-white"
+                        : "border-slate-300 bg-white text-slate-500"
+                    }`}
+                  >
+                    {isSelected ? "✓" : ""}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {question.question_type === "text_input" ? (
+        <textarea
+          id={question.question_id}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+          rows={5}
+          placeholder="Share your thoughts or extra context…"
+          className="mt-5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+        />
       ) : null}
     </div>
   );
@@ -247,10 +152,9 @@ function QuestionField({
 export default function LectureConfiguratorPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [answers, setAnswers] = useState<AnswersState>(
-    () => buildInitialAnswers(questionGroups),
+  const [answers, setAnswers] = useState<AnswersState>(() =>
+    buildInitialAnswers(),
   );
-  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clarifyingQuestions, setClarifyingQuestions] =
@@ -260,33 +164,36 @@ export default function LectureConfiguratorPage() {
   const [clarifyingError, setClarifyingError] = useState<string | null>(null);
   const [isGeneratingClarifying, setIsGeneratingClarifying] = useState(false);
   const [lectureStubId, setLectureStubId] = useState<string | null>(null);
-  const [clarifyingRawResponse, setClarifyingRawResponse] = useState<{
-    success?: boolean;
-    error?: string;
-    lecture_id?: string;
-    questions?: CreateLectureQuestion[];
-  } | null>(null);
   const [clarifyingFiles, setClarifyingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const completionRatio = useMemo(() => {
-    const total = Object.keys(answers).length;
-    const completed = Object.values(answers).filter((value) => value.trim())
-      .length;
+    const baseTotal = Object.keys(answers).length;
+    const baseCompleted = Object.values(answers).filter((value) =>
+      value.trim(),
+    ).length;
+
+    const clarifyingTotal = clarifyingQuestions?.length ?? 0;
+    const clarifyingCompleted =
+      clarifyingQuestions?.reduce((count, question) => {
+        const response = clarifyingAnswers[question.question_id];
+        if (question.question_type === "checkbox") {
+          return count + (Array.isArray(response) && response.length > 0 ? 1 : 0);
+        }
+        if (typeof response === "string" && response.trim()) {
+          return count + 1;
+        }
+        return count;
+      }, 0) ?? 0;
+
+    const total = baseTotal + clarifyingTotal;
+    const completed = baseCompleted + clarifyingCompleted;
     return total === 0 ? 0 : Math.round((completed / total) * 100);
-  }, [answers]);
+  }, [answers, clarifyingAnswers, clarifyingQuestions]);
 
   const updateAnswer = (id: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [id]: value }));
   };
-
-  const clarifyingJson = useMemo(() => {
-    if (!clarifyingRawResponse) {
-      return null;
-    }
-
-    return JSON.stringify(clarifyingRawResponse, null, 2);
-  }, [clarifyingRawResponse]);
 
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files ?? []);
@@ -313,7 +220,6 @@ export default function LectureConfiguratorPage() {
       return merged;
     });
 
-    // reset the input so the same file can be selected again after removal
     event.target.value = "";
   };
 
@@ -352,7 +258,6 @@ export default function LectureConfiguratorPage() {
 
     setIsGeneratingClarifying(true);
     setClarifyingError(null);
-    setClarifyingRawResponse(null);
 
     try {
       let token: string | null = null;
@@ -409,7 +314,6 @@ export default function LectureConfiguratorPage() {
       const nextQuestions = payload.questions ?? [];
       setLectureStubId(payload.lecture_id ?? null);
       setClarifyingQuestions(nextQuestions);
-      setClarifyingRawResponse(payload);
       setClarifyingAnswers(
         nextQuestions.reduce<ClarifyingAnswersState>((acc, question) => {
           if (question.question_type === "checkbox") {
@@ -428,7 +332,6 @@ export default function LectureConfiguratorPage() {
       setClarifyingQuestions(null);
       setClarifyingAnswers({});
       setLectureStubId(null);
-      setClarifyingRawResponse(null);
     } finally {
       setIsGeneratingClarifying(false);
     }
@@ -632,32 +535,6 @@ export default function LectureConfiguratorPage() {
           </div>
         </section>
 
-        {questionGroups.map((group) => (
-          <section key={group.id} className="space-y-6">
-            <div className="flex flex-col gap-2">
-              <h2 className="text-2xl font-semibold text-slate-900">
-                {group.title}
-              </h2>
-              <p className="max-w-3xl text-sm text-slate-600">
-                {group.description}
-              </p>
-            </div>
-
-            <div className="grid gap-6">
-              {group.questions.map((question) => (
-                <QuestionField
-                  key={question.id}
-                  question={question}
-                  value={answers[question.id]}
-                  onChange={(value) => updateAnswer(question.id, value)}
-                  onFocus={() => setActiveQuestionId(question.id)}
-                  isActive={activeQuestionId === question.id}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-
         <section className="space-y-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -672,7 +549,9 @@ export default function LectureConfiguratorPage() {
             <button
               type="button"
               onClick={generateClarifyingQuestions}
-              disabled={isGeneratingClarifying || !answers["lecture-topic"]?.trim()}
+              disabled={
+                isGeneratingClarifying || !answers["lecture-topic"]?.trim()
+              }
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
             >
               {isGeneratingClarifying ? (
@@ -687,21 +566,38 @@ export default function LectureConfiguratorPage() {
           </div>
 
           {clarifyingError ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
               {clarifyingError}
             </div>
           ) : null}
-
-          {clarifyingJson ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5">
-              <pre className="overflow-x-auto whitespace-pre-wrap text-sm text-slate-100">
-                {clarifyingJson}
-              </pre>
+          {isGeneratingClarifying ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
+              Summoning instructor follow-ups…
             </div>
-          ) : clarifyingQuestions && !isGeneratingClarifying ? (
+          ) : null}
+
+          {!isGeneratingClarifying && clarifyingQuestions?.length ? (
+            <div className="grid gap-6">
+              {clarifyingQuestions.map((question) => (
+                <ClarifyingQuestionCard
+                  key={question.question_id}
+                  question={question}
+                  value={clarifyingAnswers[question.question_id]}
+                  onChange={(nextValue) =>
+                    setClarifyingAnswers((prev) => ({
+                      ...prev,
+                      [question.question_id]: nextValue,
+                    }))
+                  }
+                />
+              ))}
+            </div>
+          ) : null}
+          {!isGeneratingClarifying &&
+          (!clarifyingQuestions || clarifyingQuestions.length === 0) ? (
             <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-600">
-              No clarifying questions came back. Try refining the topic and
-              generating again if you need more guidance.
+              Generate clarifying questions to give the instructor duo
+              additional direction.
             </div>
           ) : null}
         </section>
@@ -711,18 +607,15 @@ export default function LectureConfiguratorPage() {
             {error}
           </div>
         ) : null}
-
         <div className="flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => {
-              setAnswers(buildInitialAnswers(questionGroups));
-              setActiveQuestionId(null);
+              setAnswers(buildInitialAnswers());
               setClarifyingQuestions(null);
               setClarifyingAnswers({});
               setClarifyingError(null);
               setLectureStubId(null);
-              setClarifyingRawResponse(null);
               setClarifyingFiles([]);
               if (fileInputRef.current) {
                 fileInputRef.current.value = "";
