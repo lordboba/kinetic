@@ -11,6 +11,7 @@ import {
 } from "firebase-admin/app";
 import { getStorage } from "firebase-admin/storage";
 import type { Lecture } from "schema";
+import { uploadVoiceoverDataUrl } from "../helpers/storage/voiceovers";
 
 type CliOptions = {
   inputPath: string;
@@ -99,30 +100,6 @@ function parseArgs(): CliOptions {
   };
 }
 
-function determineExtension(mimeType: string): string {
-  const normalized = mimeType.toLowerCase();
-  if (normalized.includes("mpeg")) return "mp3";
-  if (normalized.includes("wav")) return "wav";
-  if (normalized.includes("ogg")) return "ogg";
-  if (normalized.includes("webm")) return "webm";
-  if (normalized.includes("aac")) return "aac";
-  const parts = normalized.split("/");
-  if (parts.length === 2 && parts[1]) {
-    return parts[1].split(";")[0];
-  }
-  return "bin";
-}
-
-function extractDataUrlPayload(dataUrl: string) {
-  const match = /^data:(.+);base64,(.+)$/i.exec(dataUrl);
-  if (!match) {
-    return null;
-  }
-
-  const [, mimeType, base64Data] = match;
-  return { mimeType, base64Data };
-}
-
 async function initializeFirebase(bucket?: string) {
   if (getApps().length > 0) {
     return getApp();
@@ -208,38 +185,23 @@ async function uploadVoiceovers({
     if (!slide.voiceover || !slide.voiceover.startsWith("data:")) {
       continue;
     }
-
-    const payload = extractDataUrlPayload(slide.voiceover);
-    if (!payload) {
-      continue;
-    }
-
-    const buffer = Buffer.from(payload.base64Data, "base64");
-    const extension = determineExtension(payload.mimeType);
-    const storagePath = `lectures/${lectureId}/voiceovers/slide-${String(
-      index + 1
-    ).padStart(2, "0")}.${extension}`;
-
-    const file = bucket.file(storagePath);
-    await file.save(buffer, {
-      resumable: false,
-      contentType: payload.mimeType,
+    const upload = await uploadVoiceoverDataUrl({
+      dataUrl: slide.voiceover,
+      lectureId,
+      slideIndex: index,
+      expiresAt,
       metadata: {
         cacheControl: "public,max-age=31536000,immutable",
       },
     });
 
-    const [signedUrl] = await file.getSignedUrl({
-      action: "read",
-      expires: expiresAt,
-    });
-
-    slide.voiceover = signedUrl;
+    slide.voiceover = upload.signedUrl;
+    slide.audio_transcription_link = upload.signedUrl;
     uploads.push({
       index,
-      bytes: buffer.length,
-      storagePath,
-      url: signedUrl,
+      bytes: upload.bytes,
+      storagePath: upload.storagePath,
+      url: upload.signedUrl,
     });
   }
 
@@ -297,4 +259,3 @@ main().catch((error) => {
   console.error("❌ upload-voiceovers failed:", error);
   process.exit(1);
 });
-

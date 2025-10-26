@@ -6,6 +6,10 @@ import { z } from 'zod';
 
 import { audioFramesToWav } from './audio-utils.js';
 import { ensureLiveKitLogger, getLiveKitConfig, requireLiveKitSecret } from './config.js';
+import {
+  DEFAULT_VOICEOVER_SIGNED_URL_TTL_MS,
+  uploadVoiceoverBuffer,
+} from '../storage/voiceovers.js';
 
 export const AvatarStyleOptionsSchema = z.object({
   avatarId: z.string().optional(),
@@ -167,16 +171,59 @@ export async function synthesizeAvatarSpeech(
       approximateLatencyMs,
     });
 
-    const base64Audio = wavBuffer.toString('base64');
-    // eslint-disable-next-line no-console
-    console.log('[TTS] Base64 encoding complete:', {
-      base64Length: base64Audio.length,
-      dataUrlLength: base64Audio.length + 'data:audio/wav;base64,'.length,
-    });
+    const resolvedRequestId = requestId ?? randomUUID();
+
+    const metadata = payload.metadata ?? {};
+    const lectureIdRaw = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).lectureId : undefined;
+    const slideIndexRaw = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).slideIndex ?? (metadata as Record<string, unknown>).slide_index : undefined;
+
+    const lectureId = typeof lectureIdRaw === 'string' && lectureIdRaw.length > 0 ? lectureIdRaw : undefined;
+    const slideIndexValue = typeof slideIndexRaw === 'number'
+      ? slideIndexRaw
+      : Number.isFinite(Number.parseInt(String(slideIndexRaw ?? ''), 10))
+        ? Number.parseInt(String(slideIndexRaw ?? ''), 10)
+        : undefined;
+
+    let audioUrl: string | undefined;
+    try {
+      const uploadResult = await uploadVoiceoverBuffer({
+        lectureId,
+        slideIndex: slideIndexValue,
+        buffer: wavBuffer,
+        mimeType: 'audio/wav',
+        filenameHint: Number.isFinite(slideIndexValue)
+          ? `slide-${String(Number(slideIndexValue) + 1).padStart(2, '0')}`
+          : resolvedRequestId,
+        metadata: {
+          requestId: resolvedRequestId,
+        },
+        expiresInMs: DEFAULT_VOICEOVER_SIGNED_URL_TTL_MS,
+      });
+      audioUrl = uploadResult.signedUrl;
+
+      // eslint-disable-next-line no-console
+      console.log('[TTS] Uploaded voiceover to storage:', {
+        objectPath: uploadResult.storagePath,
+        signedUrlLength: audioUrl.length,
+        expires: uploadResult.expiresAt,
+      });
+    } catch (storageError) {
+      // eslint-disable-next-line no-console
+      console.error('[TTS] Failed to upload voiceover to storage, falling back to data URL:', storageError);
+    }
+
+    if (!audioUrl) {
+      const base64Audio = wavBuffer.toString('base64');
+      audioUrl = `data:audio/wav;base64,${base64Audio}`;
+      // eslint-disable-next-line no-console
+      console.log('[TTS] Base64 fallback used for voiceover:', {
+        dataUrlLength: audioUrl.length,
+      });
+    }
 
     const response: SynthesizeAvatarSpeechResponse = {
-      requestId: requestId ?? randomUUID(),
-      audioUrl: `data:audio/wav;base64,${base64Audio}`,
+      requestId: resolvedRequestId,
+      audioUrl,
       avatarUrl: undefined,
       durationSeconds: Number.isFinite(totalDurationSeconds) ? totalDurationSeconds : undefined,
       approximateLatencyMs,
@@ -186,6 +233,7 @@ export async function synthesizeAvatarSpeech(
     // eslint-disable-next-line no-console
     console.log('[TTS] Response payload:', {
       requestId: response.requestId,
+      audioUrlIsSigned: audioUrl?.startsWith('http'),
       audioUrlLength: response.audioUrl?.length ?? 0,
       durationSeconds: response.durationSeconds,
       approximateLatencyMs: response.approximateLatencyMs,

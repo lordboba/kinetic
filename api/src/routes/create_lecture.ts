@@ -34,6 +34,7 @@ import { generateAvatarSpeech } from "../helpers/livekit/tts";
 import { stripUndefinedDeep } from "../lib/firestore_sanitize";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { uploadVoiceoverDataUrl } from "../helpers/storage/voiceovers";
 
 export const create_lecture_initial: RouteHandler = async (req, res) => {
   const isMultipart =
@@ -422,8 +423,39 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
         lectureId: lecture_id,
         slideIndex: sidx,
       },
-    }).then((speech) => {
-      lec.slides![sidx].voiceover = speech.audioUrl;
+    }).then(async (speech) => {
+      let resolvedAudioUrl = speech.audioUrl;
+
+      if (resolvedAudioUrl?.startsWith("data:")) {
+        try {
+          const upload = await uploadVoiceoverDataUrl({
+            dataUrl: resolvedAudioUrl,
+            lectureId: lecture_id,
+            slideIndex: sidx,
+            metadata: {
+              requestId: speech.requestId ?? undefined,
+            },
+          });
+          resolvedAudioUrl = upload.signedUrl;
+          req.log.info({
+            lecture_id,
+            slide_index: sidx,
+            storage_path: upload.storagePath,
+          }, "[LectureGen] Voiceover data URL persisted to storage");
+        } catch (persistError) {
+          req.log.error({
+            lecture_id,
+            slide_index: sidx,
+            error: persistError instanceof Error ? persistError.message : persistError,
+          }, "[LectureGen] Failed to persist voiceover data URL; falling back to inline data");
+        }
+      }
+
+      if (resolvedAudioUrl) {
+        lec.slides![sidx].voiceover = resolvedAudioUrl;
+        lec.slides![sidx].audio_transcription_link = resolvedAudioUrl;
+      }
+
       const currentCount = ++completedAudioCount;
       req.log.info({
         lecture_id,
