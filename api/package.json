@@ -12,7 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
     "@fastify/cors": "^9.0.0",
-    "@fastify/multipart": "^9.2.1",
+    "@fastify/multipart": "7.7.3",
     "@fastify/websocket": "^10.0.1",
     "@livekit/agents": "^1.0.12",
     "@livekit/rtc-node": "^0.13.20",
