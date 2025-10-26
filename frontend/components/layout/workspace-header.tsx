@@ -12,6 +12,11 @@ const workspaceLinks = [
 export function WorkspaceHeader() {
   const pathname = usePathname();
   const { signOut, user } = useAuth();
+  const visibleWorkspaceLinks = workspaceLinks.filter((link) => {
+    const isActive =
+      pathname === link.href || pathname.startsWith(`${link.href}/`);
+    return !(link.href === "/lectures/new" && isActive);
+  });
 
   return (
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -21,7 +26,7 @@ export function WorkspaceHeader() {
         </Link>
 
         <nav className="flex items-center gap-4 text-sm font-semibold text-slate-600">
-          {workspaceLinks.map((link) => {
+          {visibleWorkspaceLinks.map((link) => {
             const isActive =
               pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
