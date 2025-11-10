@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
-import type { SynthesizeAvatarSpeechResponse } from './tts-avatar.js';
+import type { SynthesizeAvatarSpeechResponse, TtsStreamCallbacks } from './tts-avatar.js';
 import { AvatarStyleOptionsSchema, SynthesizeAvatarSpeechResponseSchema, synthesizeAvatarSpeech } from './tts-avatar.js';
 
 export const GenerateAvatarSpeechOptionsSchema = z.object({
@@ -25,6 +25,7 @@ const DEFAULT_VOICE = process.env.LIVEKIT_DEFAULT_VOICE ?? '248be419-c632-4f23-a
 export async function generateAvatarSpeech(
   text: string,
   options: GenerateAvatarSpeechOptions = { format: 'wav' },
+  callbacks?: TtsStreamCallbacks,
 ): Promise<GenerateAvatarSpeechResult> {
   // eslint-disable-next-line no-console
   console.log('[TTS-Wrapper] generateAvatarSpeech called with:', {
@@ -58,7 +59,7 @@ export async function generateAvatarSpeech(
   // eslint-disable-next-line no-console
   console.log('[TTS-Wrapper] Calling synthesizeAvatarSpeech with:', synthesisPayload);
 
-  const response = await synthesizeAvatarSpeech(synthesisPayload);
+  const response = await synthesizeAvatarSpeech(synthesisPayload, callbacks);
 
   // eslint-disable-next-line no-console
   console.log('[TTS-Wrapper] generateAvatarSpeech received response:', {

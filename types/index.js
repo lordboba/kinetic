@@ -2,7 +2,7 @@ const { z } = require("zod");
 
 const ZLectureSlide = z.object({
   transcript: z.string(),
-  audio_transcription_link: z.string(),
+  audio_transcription_link: z.string().optional(),
   title: z.string(),
   content: z.string().optional(),
   diagram: z.string().optional(),
@@ -21,6 +21,11 @@ const ZLecture = z.object({
 const ZGetLectureRequest = z.object({
   type: z.literal("get_lecture_request"),
   lecture_id: z.string(),
+  capabilities: z
+    .object({
+      audio_streaming: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const ZGetLectureResponse = z.object({
@@ -52,6 +57,38 @@ const ZUserQuestionResponse = z.object({
   response: ZUserAnalyzeQuery,
 });
 
+const ZSlideAudioChunk = z.object({
+  type: z.literal("slide_audio_chunk"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  chunk_index: z.number(),
+  sample_rate: z.number().positive(),
+  channels: z.number().positive(),
+  samples_per_channel: z.number().positive(),
+  pcm16_base64: z.string(),
+  transcript_delta: z.string().optional(),
+  is_final: z.boolean().optional(),
+});
+
+const ZSlideAudioStatus = z.object({
+  type: z.literal("slide_audio_status"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  status: z.enum(["started", "completed", "error"]),
+  audio_url: z.string().optional(),
+  error: z.string().optional(),
+});
+
+const ZSlideAudioBuffer = z.object({
+  type: z.literal("slide_audio_buffer"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  chunk_index: z.number(),
+  buffered_ms: z.number().nonnegative(),
+  ready_to_advance: z.boolean().optional(),
+  is_complete: z.boolean().optional(),
+});
+
 const ZBackendQuestionRequest = z.object({
   type: z.literal("backend_question_request"),
   lecture_id: z.string(),
@@ -75,6 +112,9 @@ const ZOutboundMessage = z.union([
   ZGetLectureResponse,
   ZUserQuestionResponse,
   ZBackendQuestionResponse,
+  ZSlideAudioChunk,
+  ZSlideAudioBuffer,
+  ZSlideAudioStatus,
 ]);
 
 module.exports = {
@@ -85,6 +125,9 @@ module.exports = {
   ZUserQuestionRequest,
   ZUserAnalyzeQuery,
   ZUserQuestionResponse,
+  ZSlideAudioChunk,
+  ZSlideAudioBuffer,
+  ZSlideAudioStatus,
   ZBackendQuestionRequest,
   ZBackendQuestionResponse,
   ZInboundMessage,

@@ -83,21 +83,23 @@ This document provides a comprehensive index of all API routes and their corresp
     augment_slides_instructions?: string
   }
   ```
+  - Optional: `supports_streaming_audio=1` to opt into low-latency narration streaming. When omitted, the server waits for every voiceover before signaling completion (legacy behavior).
 
 **WebSocket Messages (Outbound):**
 - **Type:** `CreateLectureStatusUpdate` (`types/index.d.ts:173`)
   ```typescript
-  | { type: "completedAll" }
-  | { type: "completedOne", completed: "transcript" }
-  | { type: "completedOne", completed: "images" | "tts" | "diagrams", counter: number }
-  | { type: "enumerated", thing: "images" | "diagrams" | "tts", total: number }
+| { type: "completedAll" }
+| { type: "completedOne", completed: "transcript" }
+| { type: "completedOne", completed: "images" | "diagrams" | "tts", counter: number }
+| { type: "enumerated", thing: "images" | "diagrams" | "tts", total: number }
   ```
 
 **Process Flow:**
 1. Validates lecture_id from cache (must match from initial request)
 2. Generates transcript with slides
-3. Sends enumeration of assets (images, diagrams, TTS)
-4. Generates assets in parallel (15 concurrent image limit)
+3. Sends enumeration of visual assets (images, diagrams, and—when legacy mode is used—TTS)
+4. Generates visual assets in parallel (15 concurrent image limit)
+5. If the request includes `supports_streaming_audio=1` the server immediately streams narration via `/api/watch_lecture` while TTS jobs continue in the background; otherwise it waits for every voiceover before replying (legacy behavior)
 5. Saves complete lecture to Firestore
 6. Updates user profile with lecture ID
 7. Sends completion message and closes connection
@@ -128,7 +130,10 @@ This document provides a comprehensive index of all API routes and their corresp
   ```typescript
   | ZGetLectureRequest: {
       type: "get_lecture_request",
-      lecture_id: string
+      lecture_id: string,
+      capabilities?: {
+        audio_streaming?: boolean
+      }
     }
   | ZUserQuestionRequest: {
       type: "user_question_request",
@@ -144,6 +149,7 @@ This document provides a comprehensive index of all API routes and their corresp
       answer: string
     }
   ```
+  - Set `capabilities.audio_streaming = true` to opt into live audio streaming. Legacy clients can omit it to wait for uploaded voiceovers.
 
 **Outbound Messages:**
 - **Zod:** `ZOutboundMessage` (`types/zod_types.ts:93` & `types/index.d.ts:88`)

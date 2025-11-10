@@ -24,6 +24,8 @@ type StoredConfig = {
   createdAt: string;
 };
 
+const STREAMING_AUDIO_ENABLED = true;
+
 type AssetKey = "images" | "diagrams" | "tts";
 
 const ASSET_LABELS: Record<AssetKey, string> = {
@@ -31,8 +33,9 @@ const ASSET_LABELS: Record<AssetKey, string> = {
   diagrams: "Diagrams",
   tts: "Voiceovers",
 };
-
-const ASSET_ORDER: AssetKey[] = ["images", "diagrams", "tts"];
+const ACTIVE_ASSET_ORDER: AssetKey[] = STREAMING_AUDIO_ENABLED
+  ? ["images", "diagrams"]
+  : ["images", "diagrams", "tts"];
 
 const logger = createLogger('Kinetic Progress');
 
@@ -191,6 +194,9 @@ export default function LectureProgressPage() {
           answers: JSON.stringify(answersArray),
           token: token
         });
+        if (STREAMING_AUDIO_ENABLED) {
+          params.set("supports_streaming_audio", "1");
+        }
         let socketUrl: string;
         try {
           const baseUrl = backendEndpoint.startsWith("http")
@@ -250,7 +256,7 @@ export default function LectureProgressPage() {
                   setTranscriptComplete(true);
                 } else {
                   if (typeof data.counter === "number") {
-                    // Update progress counter for images/diagrams/tts
+                    // Update progress counter
                     setProgress(prev => ({
                       ...prev,
                       [data.completed]:
@@ -270,7 +276,7 @@ export default function LectureProgressPage() {
                   thing: data.thing,
                   total: data.total,
                 });
-                // Set total counts for images/diagrams/tts
+                // Set total counts
                 setTotalCounts(prev => ({
                   ...prev,
                   [data.thing]: data.total,
@@ -525,7 +531,8 @@ export default function LectureProgressPage() {
         <h1 className="text-3xl font-semibold text-slate-900">{headline}</h1>
         <p className="max-w-2xl text-sm text-slate-600">
           Watch as your lecture comes to life. We&apos;re generating the transcript,
-          finding images, creating diagrams, and synthesizing voiceovers in real-time.
+          finding images, and creating diagrams in real-time. Narration streams directly
+          in the lecture viewer as it is produced.
         </p>
       </div>
 
@@ -554,7 +561,7 @@ export default function LectureProgressPage() {
             )}
           </div>
 
-          {ASSET_ORDER.map(renderAssetProgress)}
+          {ACTIVE_ASSET_ORDER.map(renderAssetProgress)}
         </div>
       )}
 

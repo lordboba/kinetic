@@ -31,10 +31,12 @@ import { generate_transcript } from "../helpers/claude/transcript.js";
 import { generateMermaidDiagrams, type GenerateMermaidRequest } from "../helpers/claude/mermaid.js";
 import { getImageForKeyword } from "../helpers/image/index.js";
 import { generateAvatarSpeech } from "../helpers/livekit/tts.js";
+import type { TtsStreamChunk } from "../helpers/livekit/tts-avatar.js";
 import { stripUndefinedDeep } from "../lib/firestore_sanitize.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { uploadVoiceoverDataUrl } from "../helpers/storage/voiceovers.js";
+import { lectureAudioStreamBroker } from "../lib/lecture_audio_stream.js";
 
 export const create_lecture_initial: RouteHandler = async (req, res) => {
   const isMultipart =
@@ -249,8 +251,16 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
     return;
   }
 
-  const { lecture_id, answers, augment_slides_instructions } =
-    req.query as CreateLectureMainRequest;
+  const {
+    lecture_id,
+    answers,
+    augment_slides_instructions,
+    supports_streaming_audio,
+  } = req.query as CreateLectureMainRequest;
+  const supportsStreamingAudio =
+    supports_streaming_audio === "1" ||
+    supports_streaming_audio === "true" ||
+    supports_streaming_audio === true;
   const user = req.user;
 
   req.log.info(
@@ -379,13 +389,16 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       total: diagramCount,
     } satisfies CreateLectureStatusUpdate)
   );
-  ws.send(
-    JSON.stringify({
-      type: "enumerated",
-      thing: "tts",
-      total: ttsCount,
-    } satisfies CreateLectureStatusUpdate)
-  );
+
+  if (!supportsStreamingAudio) {
+    ws.send(
+      JSON.stringify({
+        type: "enumerated",
+        thing: "tts",
+        total: ttsCount,
+      } satisfies CreateLectureStatusUpdate)
+    );
+  }
 
   type RecursivePartial<T> = {
     [P in keyof T]?: T[P] extends (infer U)[]
@@ -397,7 +410,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
 
   const lec: RecursivePartial<Lecture> = {
     permitted_users: [user.uid],
-    version: 1,
+    version: supportsStreamingAudio ? 2 : 1,
     topic: cached.lecture_topic,
     slides: ts.map(
       (t) =>
@@ -452,9 +465,9 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       })
     );
 
-  // LiveKit image generation currently allows up to 15 concurrent streams.
+  // LiveKit image generation currently allows up to 3 concurrent streams.
   // Use a simple limiter to stay within the platform constraints.
-  const imageConcurrencyLimit = createLimiter(15);
+  const imageConcurrencyLimit = createLimiter(3);
 
   const imageTasks = ts
     .map((s, sidx) => ({ s, sidx }))
@@ -487,14 +500,75 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       })
     );
 
-  const voiceoverTasks = ts.map((s, sidx) =>
-    generateAvatarSpeech(s.transcript, {
-      format: "wav",
-      metadata: {
-        lectureId: lecture_id,
-        slideIndex: sidx,
-      },
-    }).then(async (speech) => {
+  let resolveLecturePersisted: (() => void) | null = null;
+  const lecturePersisted = new Promise<void>((resolve) => {
+    resolveLecturePersisted = resolve;
+  });
+
+  const STREAM_READY_BUFFER_MS = 2_000;
+
+  const voiceoverTasks = ts.map(async (s, sidx) => {
+    let chunkIndex = 0;
+    let bufferedMs = 0;
+    lectureAudioStreamBroker.publishStatus({
+      type: "slide_audio_status",
+      lecture_id,
+      slide_index: sidx,
+      status: "started",
+    });
+
+    const handleChunk = async (chunk: TtsStreamChunk) => {
+      if (!chunk.frame) {
+        return;
+      }
+
+      chunkIndex += 1;
+      const pcmBuffer = Buffer.from(
+        chunk.frame.data.buffer,
+        chunk.frame.data.byteOffset,
+        chunk.frame.data.byteLength
+      );
+
+      lectureAudioStreamBroker.publishChunk({
+        type: "slide_audio_chunk",
+        lecture_id,
+        slide_index: sidx,
+        chunk_index: chunkIndex,
+        sample_rate: chunk.frame.sampleRate,
+        channels: chunk.frame.channels,
+        samples_per_channel: chunk.frame.samplesPerChannel,
+        pcm16_base64: pcmBuffer.toString("base64"),
+        transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
+      });
+
+      const chunkDurationMs =
+        (chunk.frame.samplesPerChannel / chunk.frame.sampleRate) * 1000;
+      bufferedMs += chunkDurationMs;
+      lectureAudioStreamBroker.publishBuffer({
+        type: "slide_audio_buffer",
+        lecture_id,
+        slide_index: sidx,
+        chunk_index: chunkIndex,
+        buffered_ms: Math.round(bufferedMs),
+        ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+      });
+    };
+
+    try {
+      const speech = await generateAvatarSpeech(
+        s.transcript,
+        {
+          format: "wav",
+          metadata: {
+            lectureId: lecture_id,
+            slideIndex: sidx,
+          },
+        },
+        {
+          onChunk: handleChunk,
+        }
+      );
+
       let resolvedAudioUrl = speech.audioUrl;
 
       if (resolvedAudioUrl?.startsWith("data:")) {
@@ -534,7 +608,43 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
 
       if (resolvedAudioUrl) {
         lec.slides![sidx].audio_transcription_link = resolvedAudioUrl;
+        try {
+          await lecturePersisted;
+          await lectureDoc(lecture_id).update({
+            [`slides.${sidx}.audio_transcription_link`]: resolvedAudioUrl,
+          });
+        } catch (updateError) {
+          req.log.error(
+            {
+              lecture_id,
+              slide_index: sidx,
+              error:
+                updateError instanceof Error
+                  ? updateError.message
+                  : updateError,
+            },
+            "[LectureGen] Failed to persist voiceover link"
+          );
+        }
       }
+
+      lectureAudioStreamBroker.publishStatus({
+        type: "slide_audio_status",
+        lecture_id,
+        slide_index: sidx,
+        status: "completed",
+        audio_url: resolvedAudioUrl,
+      });
+
+      lectureAudioStreamBroker.publishBuffer({
+        type: "slide_audio_buffer",
+        lecture_id,
+        slide_index: sidx,
+        chunk_index: chunkIndex,
+        buffered_ms: Math.round(bufferedMs),
+        ready_to_advance: true,
+        is_complete: true,
+      });
 
       const currentCount = ++completedAudioCount;
       req.log.info(
@@ -546,61 +656,82 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
         },
         "[LectureGen] Voiceover generated"
       );
-      ws.send(
-        JSON.stringify({
-          type: "completedOne",
-          completed: "tts",
-          counter: currentCount,
-        } satisfies CreateLectureStatusUpdate)
+
+      if (!supportsStreamingAudio) {
+        ws.send(
+          JSON.stringify({
+            type: "completedOne",
+            completed: "tts",
+            counter: currentCount,
+          } satisfies CreateLectureStatusUpdate)
+        );
+      }
+    } catch (error) {
+      lectureAudioStreamBroker.publishStatus({
+        type: "slide_audio_status",
+        lecture_id,
+        slide_index: sidx,
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      lectureAudioStreamBroker.publishBuffer({
+        type: "slide_audio_buffer",
+        lecture_id,
+        slide_index: sidx,
+        chunk_index: chunkIndex,
+        buffered_ms: Math.round(bufferedMs),
+        ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+      });
+      req.log.error(
+        {
+          lecture_id,
+          slide_index: sidx,
+          error: error instanceof Error ? error.message : error,
+        },
+        "[LectureGen] Voiceover generation failed"
       );
-    })
-  );
+    }
+  });
 
   await Promise.all([
-    // ALL DA MERMAID DIAGS
-    //
-    // Old code. This is really sad. I am really sad.
-    //
-    // generateMermaidDiagrams(
-    //   llm,
-    //   ts
-    //     .map((s, sidx) => ({ s, sidx }))
-    //     .filter(({ s }) => s.diagram != undefined)
-    //     .map(({ s, sidx }) => ({
-    //       type: s.diagram!.type,
-    //       extended_description: s.diagram!.extended_description,
-    //       slide_num: sidx,
-    //     }))
-    // ).then((mmds) => {
-    //   for (const mmd of mmds) {
-    //     lec.slides![Number.parseInt(mmd.slide_number)].diagram = mmd.mermaid;
-    //   }
-    //   ws.send(
-    //     JSON.stringify({
-    //       type: "completedOne",
-    //       completed: "diagrams",
-    //     } satisfies CreateLectureStatusUpdate)
-    //   );
-    // }),
-
-    ...diagramTasks,
-    // ALL DA IMAGES
-    ...imageTasks,
-    // ALL DA VOICEOVERS
-    ...voiceoverTasks,
+    ...diagramTasks, // Diagram Tasks
+    ...imageTasks, // Image Tasks
   ]);
 
+  if (supportsStreamingAudio) {
+    void Promise.allSettled(voiceoverTasks).then((results) => {
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        req.log.warn(
+          {
+            lecture_id,
+            failures: failures.length,
+          },
+          "[LectureGen] Some voiceover tasks failed after lecture completion"
+        );
+      }
+    });
+  } else {
+    await Promise.all(voiceoverTasks);
+  }
+
   const assetGenerationDuration = Date.now() - assetGenerationStart;
+  const pendingVoiceovers = supportsStreamingAudio
+    ? Math.max(ttsCount - completedAudioCount, 0)
+    : 0;
   req.log.info(
     {
       lecture_id,
       duration_ms: assetGenerationDuration,
       images: completedImageCount,
       diagrams: completedDiagramCount,
-      tts: completedAudioCount,
+      tts_completed: completedAudioCount,
+      tts_pending: pendingVoiceovers,
       timestamp: new Date().toISOString(),
     },
-    "[LectureGen] All assets generated"
+    pendingVoiceovers > 0
+      ? "[LectureGen] Visual assets generated; voiceovers streaming async"
+      : "[LectureGen] All assets generated"
   );
 
   req.log.info(
@@ -621,6 +752,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
   await ud.update({
     lectures: admin.firestore.FieldValue.arrayUnion(lecture_id),
   });
+  resolveLecturePersisted?.();
 
   req.log.info(
     {

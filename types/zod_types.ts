@@ -40,6 +40,11 @@ export const CreateLectureUploadSchema = z.object({
 export const ZGetLectureRequest = z.object({
   type: z.literal("get_lecture_request"),
   lecture_id: z.string(),
+  capabilities: z
+    .object({
+      audio_streaming: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const ZGetLectureResponse = z.object({
@@ -77,6 +82,38 @@ export const ZUserQuestionResponse = z.object({
   partial_lecture: ZPartialLecture.optional(),
 });
 
+export const ZSlideAudioChunk = z.object({
+  type: z.literal("slide_audio_chunk"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  chunk_index: z.number(),
+  sample_rate: z.number().positive(),
+  channels: z.number().positive(),
+  samples_per_channel: z.number().positive(),
+  pcm16_base64: z.string(),
+  transcript_delta: z.string().optional(),
+  is_final: z.boolean().optional(),
+});
+
+export const ZSlideAudioStatus = z.object({
+  type: z.literal("slide_audio_status"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  status: z.enum(["started", "completed", "error"]),
+  audio_url: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export const ZSlideAudioBuffer = z.object({
+  type: z.literal("slide_audio_buffer"),
+  lecture_id: z.string(),
+  slide_index: z.number(),
+  chunk_index: z.number(),
+  buffered_ms: z.number().nonnegative(),
+  ready_to_advance: z.boolean().optional(),
+  is_complete: z.boolean().optional(),
+});
+
 export const ZBackendQuestionRequest = z.object({
   type: z.literal("backend_question_request"),
   lecture_id: z.string(),
@@ -100,6 +137,9 @@ export const ZOutboundMessage = z.union([
   ZGetLectureResponse,
   ZUserQuestionResponse,
   ZBackendQuestionResponse,
+  ZSlideAudioChunk,
+  ZSlideAudioBuffer,
+  ZSlideAudioStatus,
 ]);
 
 export type GetLectureRequest = z.infer<typeof ZGetLectureRequest>;
@@ -109,6 +149,9 @@ export type UserQuestionResponse = z.infer<typeof ZUserQuestionResponse>;
 export type PartialLecture = z.infer<typeof ZPartialLecture>;
 export type BackendQuestionRequest = z.infer<typeof ZBackendQuestionRequest>;
 export type BackendQuestionResponse = z.infer<typeof ZBackendQuestionResponse>;
+export type SlideAudioChunk = z.infer<typeof ZSlideAudioChunk>;
+export type SlideAudioBuffer = z.infer<typeof ZSlideAudioBuffer>;
+export type SlideAudioStatus = z.infer<typeof ZSlideAudioStatus>;
 
 export type InboundMessage = z.infer<typeof ZInboundMessage>;
 export type OutboundMessage = z.infer<typeof ZOutboundMessage>;

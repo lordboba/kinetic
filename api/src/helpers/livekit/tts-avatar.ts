@@ -11,6 +11,17 @@ import {
   uploadVoiceoverBuffer,
 } from '../storage/voiceovers.js';
 
+export type TtsStreamChunk = {
+  requestId?: string;
+  deltaText?: string;
+  frame: AudioFrame;
+  chunkIndex: number;
+};
+
+export type TtsStreamCallbacks = {
+  onChunk?: (chunk: TtsStreamChunk) => void | Promise<void>;
+};
+
 export const AvatarStyleOptionsSchema = z.object({
   avatarId: z.string().optional(),
   pose: z.string().optional(),
@@ -44,6 +55,7 @@ export type SynthesizeAvatarSpeechResponse = z.infer<typeof SynthesizeAvatarSpee
 
 export async function synthesizeAvatarSpeech(
   payload: SynthesizeAvatarSpeechRequest,
+  callbacks?: TtsStreamCallbacks,
 ): Promise<SynthesizeAvatarSpeechResponse> {
   // eslint-disable-next-line no-console
   console.log('[TTS] Starting synthesizeAvatarSpeech with payload:', {
@@ -137,7 +149,24 @@ export async function synthesizeAvatarSpeech(
 
       requestId = chunk.requestId ?? requestId;
       transcript += chunk.deltaText ?? '';
-      frames.push(chunk.frame);
+
+      if (chunk.frame) {
+        frames.push(chunk.frame);
+        if (callbacks?.onChunk) {
+          const chunkPayload: TtsStreamChunk = {
+            requestId: chunk.requestId ?? requestId,
+            deltaText: chunk.deltaText ?? undefined,
+            frame: chunk.frame,
+            chunkIndex: chunkCount,
+          };
+          try {
+            await callbacks.onChunk(chunkPayload);
+          } catch (chunkError) {
+            // eslint-disable-next-line no-console
+            console.error('[TTS] onChunk callback failed:', chunkError);
+          }
+        }
+      }
 
       if (firstFrameTimestamp === undefined) {
         firstFrameTimestamp = Date.now();

@@ -22,12 +22,15 @@ import { generateAvatarSpeech } from "../helpers/livekit/tts.js";
 import { uploadVoiceoverDataUrl } from "../helpers/storage/voiceovers.js";
 import { stripUndefinedDeep } from "../lib/firestore_sanitize.js";
 import { LectureSlide } from "schema";
+import type { TtsStreamChunk } from "../helpers/livekit/tts-avatar.js";
+import { lectureAudioStreamBroker } from "../lib/lecture_audio_stream.js";
 
 type SessionState =
   | { phase: "waitingForInit" }
   | {
       phase: "ready";
       lectureId: string;
+      audioStreamingEnabled: boolean;
       // cache anything else you want, e.g. loaded lecture data
       // lectureData: Lecture;
     };
@@ -56,9 +59,88 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
 
     // Fetch/validate lecture
     const lectureId = msg.lecture_id;
-    const lectureData = await lectureDoc(lectureId)
+    let lectureData = await lectureDoc(lectureId)
       .get()
       .then((d) => d.data());
+
+    if (lectureData?.slides) {
+      let slidesArray: unknown[];
+      if (Array.isArray(lectureData.slides)) {
+        slidesArray = lectureData.slides as unknown[];
+      } else if (typeof lectureData.slides === "object") {
+        slidesArray = Object.keys(lectureData.slides)
+          .sort((a, b) => Number(a) - Number(b))
+          .map((key) => lectureData.slides[key]);
+      } else {
+        slidesArray = [];
+      }
+
+      const normalizedSlides = slidesArray.map((raw, index) => {
+        const candidate = (raw ?? {}) as Record<string, unknown>;
+        const slideBlock =
+          candidate && typeof candidate.slide === "object" && candidate.slide !== null
+            ? (candidate.slide as Record<string, unknown>)
+            : {};
+
+        const transcript =
+          typeof candidate.transcript === "string"
+            ? (candidate.transcript as string)
+            : typeof slideBlock.transcript === "string"
+              ? (slideBlock.transcript as string)
+              : typeof candidate.text === "string"
+                ? (candidate.text as string)
+                : "";
+
+        const title =
+          typeof candidate.title === "string"
+            ? (candidate.title as string)
+            : typeof slideBlock.title === "string"
+              ? (slideBlock.title as string)
+              : `Slide ${index + 1}`;
+
+        const content =
+          typeof candidate.content === "string"
+            ? (candidate.content as string)
+            : typeof slideBlock.markdown_body === "string"
+              ? (slideBlock.markdown_body as string)
+              : undefined;
+
+        const audioLink =
+          typeof candidate.audio_transcription_link === "string"
+            ? (candidate.audio_transcription_link as string)
+            : typeof candidate.audio_url === "string"
+              ? (candidate.audio_url as string)
+              : undefined;
+
+        return {
+          transcript,
+          title,
+          content,
+          diagram:
+            typeof candidate.diagram === "string"
+              ? (candidate.diagram as string)
+              : typeof slideBlock.diagram === "string"
+                ? (slideBlock.diagram as string)
+                : undefined,
+          image:
+            typeof candidate.image === "string"
+              ? (candidate.image as string)
+              : typeof slideBlock.image === "string"
+                ? (slideBlock.image as string)
+                : undefined,
+          question:
+            typeof candidate.question === "string"
+              ? (candidate.question as string)
+              : undefined,
+          audio_transcription_link: audioLink,
+        } satisfies LectureSlide;
+      });
+
+      lectureData = {
+        ...lectureData,
+        slides: normalizedSlides,
+      };
+    }
 
     if (!lectureData) {
       send({
@@ -78,29 +160,28 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
 
     const validation = ZGetLectureResponse.safeParse(response);
     if (!validation.success) {
+      const details = z.treeifyError(validation.error);
       console.error(
-        "[watch_lecture] Lecture data validation failed:",
-        z.treeifyError(validation.error)
+        "[watch_lecture] Lecture data validation failed, forwarding raw snapshot:",
+        JSON.stringify(details, null, 2)
       );
-      send({
-        success: false,
-        error: "invalid_lecture_data",
-        lecture_id: lectureId,
-        details: z.treeifyError(validation.error),
-      });
-      ws.close();
-      return;
     }
 
     // Move to ready state
+    const audioStreamingEnabled =
+      msg.capabilities?.audio_streaming === true;
+
     state = {
       phase: "ready",
       lectureId,
+      audioStreamingEnabled,
       // lectureData,
     };
 
-    // Send validated lecture snapshot back to client
-    send(validation.data);
+    // Send lecture snapshot back to client (validated when possible)
+    send(validation.success ? validation.data : response);
+
+    lectureAudioStreamBroker.addSubscriber(lectureId, ws);
   }
 
   async function handleUserInitiatedRequest(msg: UserQuestionRequest) {
@@ -270,14 +351,72 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
         );
 
       // Generate voiceovers
-      const voiceoverTasks = newSlideData.map((s, sidx) =>
-        generateAvatarSpeech(s.transcript, {
-          format: "wav",
-          metadata: {
-            lectureId: msg.lecture_id,
-            slideIndex: msg.current_slide + 1 + sidx,
-          },
-        }).then(async (speech) => {
+      const STREAM_READY_BUFFER_MS = 2_000;
+
+      const voiceoverTasks = newSlideData.map(async (s, sidx) => {
+        const absoluteSlideIndex = msg.current_slide + 1 + sidx;
+        let chunkIndex = 0;
+        let bufferedMs = 0;
+
+        lectureAudioStreamBroker.publishStatus({
+          type: "slide_audio_status",
+          lecture_id: msg.lecture_id,
+          slide_index: absoluteSlideIndex,
+          status: "started",
+        });
+
+        const handleChunk = async (chunk: TtsStreamChunk) => {
+          if (!chunk.frame) {
+            return;
+          }
+
+          chunkIndex += 1;
+          const pcmBuffer = Buffer.from(
+            chunk.frame.data.buffer,
+            chunk.frame.data.byteOffset,
+            chunk.frame.data.byteLength
+          );
+
+          lectureAudioStreamBroker.publishChunk({
+            type: "slide_audio_chunk",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            chunk_index: chunkIndex,
+            sample_rate: chunk.frame.sampleRate,
+            channels: chunk.frame.channels,
+            samples_per_channel: chunk.frame.samplesPerChannel,
+            pcm16_base64: pcmBuffer.toString("base64"),
+            transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
+          });
+
+          const chunkDurationMs =
+            (chunk.frame.samplesPerChannel / chunk.frame.sampleRate) * 1000;
+          bufferedMs += chunkDurationMs;
+          lectureAudioStreamBroker.publishBuffer({
+            type: "slide_audio_buffer",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            chunk_index: chunkIndex,
+            buffered_ms: Math.round(bufferedMs),
+            ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+          });
+        };
+
+        try {
+          const speech = await generateAvatarSpeech(
+            s.transcript,
+            {
+              format: "wav",
+              metadata: {
+                lectureId: msg.lecture_id,
+                slideIndex: absoluteSlideIndex,
+              },
+            },
+            {
+              onChunk: handleChunk,
+            }
+          );
+
           let resolvedAudioUrl = speech.audioUrl;
 
           if (resolvedAudioUrl?.startsWith("data:")) {
@@ -285,7 +424,7 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
               const upload = await uploadVoiceoverDataUrl({
                 dataUrl: resolvedAudioUrl,
                 lectureId: msg.lecture_id,
-                slideIndex: msg.current_slide + 1 + sidx,
+                slideIndex: absoluteSlideIndex,
                 customMetadata: {
                   requestId: speech.requestId ?? undefined,
                 },
@@ -316,7 +455,43 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
 
           if (resolvedAudioUrl) {
             newSlides[sidx].audio_transcription_link = resolvedAudioUrl;
+            try {
+              await lectureDoc(msg.lecture_id).update({
+                [`slides.${absoluteSlideIndex}.audio_transcription_link`]:
+                  resolvedAudioUrl,
+              });
+            } catch (updateError) {
+              req.log.error(
+                {
+                  lecture_id: msg.lecture_id,
+                  slide_index: absoluteSlideIndex,
+                  error:
+                    updateError instanceof Error
+                      ? updateError.message
+                      : updateError,
+                },
+                "[watch_lecture] Failed to persist regenerated voiceover link"
+              );
+            }
           }
+
+          lectureAudioStreamBroker.publishStatus({
+            type: "slide_audio_status",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            status: "completed",
+            audio_url: resolvedAudioUrl,
+          });
+
+          lectureAudioStreamBroker.publishBuffer({
+            type: "slide_audio_buffer",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            chunk_index: chunkIndex,
+            buffered_ms: Math.round(bufferedMs),
+            ready_to_advance: true,
+            is_complete: true,
+          });
 
           req.log.info(
             {
@@ -325,11 +500,48 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
             },
             "[watch_lecture] Voiceover generated for regenerated slide"
           );
-        })
-      );
+        } catch (error) {
+          lectureAudioStreamBroker.publishStatus({
+            type: "slide_audio_status",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          });
+          lectureAudioStreamBroker.publishBuffer({
+            type: "slide_audio_buffer",
+            lecture_id: msg.lecture_id,
+            slide_index: absoluteSlideIndex,
+            chunk_index: chunkIndex,
+            buffered_ms: Math.round(bufferedMs),
+            ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+          });
+          req.log.error(
+            {
+              lecture_id: msg.lecture_id,
+              slide_index: absoluteSlideIndex,
+              error: error instanceof Error ? error.message : error,
+            },
+            "[watch_lecture] Voiceover generation failed for regenerated slide"
+          );
+        }
+      });
 
-      // Wait for all assets to be generated
-      await Promise.all([...diagramTasks, ...imageTasks, ...voiceoverTasks]);
+      // Wait for diagrams and images; voiceovers stream independently
+      await Promise.all([...diagramTasks, ...imageTasks]);
+
+      void Promise.allSettled(voiceoverTasks).then((results) => {
+        const failures = results.filter((r) => r.status === "rejected");
+        if (failures.length > 0) {
+          req.log.warn(
+            {
+              lecture_id: msg.lecture_id,
+              failures: failures.length,
+            },
+            "[watch_lecture] Some regenerated slide voiceovers failed"
+          );
+        }
+      });
 
       req.log.info(
         {

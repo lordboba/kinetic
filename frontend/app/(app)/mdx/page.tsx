@@ -1,10 +1,11 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Slide } from '@/components/slides/Slide';
 import { useSearchParams } from 'next/navigation';
 import { getBackendEndpoint } from '@/lib/env';
+import { useLectureAudioStream } from '@/lib/useLectureAudioStream';
 import type { LectureSlide, Lecture } from 'schema';
 import {
   ZGetLectureRequest,
@@ -13,12 +14,25 @@ import {
   ZUserQuestionResponse,
   ZBackendQuestionRequest,
   ZOutboundMessage,
+  ZSlideAudioChunk,
+  ZSlideAudioStatus,
+  ZSlideAudioBuffer,
   type GetLectureResponse,
   type UserQuestionResponse,
   type BackendQuestionRequest,
+  type SlideAudioChunk,
+  type SlideAudioStatus,
+  type SlideAudioBuffer,
 } from 'schema/zod_types';
 
 type ClientPhase = 'disconnected' | 'connecting' | 'awaiting_lecture' | 'ready';
+
+interface UseLectureChannelOptions {
+  onAudioChunk?: (chunk: SlideAudioChunk) => void;
+  onAudioStatus?: (status: SlideAudioStatus) => void;
+  onAudioBuffer?: (buffer: SlideAudioBuffer) => void;
+  enableStreamingAudio?: boolean;
+}
 
 interface UseLectureChannelReturn {
   phase: ClientPhase;
@@ -28,13 +42,18 @@ interface UseLectureChannelReturn {
   askQuestion: (slide: number, question: string) => void;
 }
 
-function useLectureChannel(lectureId: string): UseLectureChannelReturn {
+function useLectureChannel(lectureId: string, options?: UseLectureChannelOptions): UseLectureChannelReturn {
   const [phase, setPhase] = useState<ClientPhase>('disconnected');
   const [lecture, setLecture] = useState<GetLectureResponse['lecture'] | null>(null);
   const [lastAnswer, setLastAnswer] = useState<UserQuestionResponse | null>(null);
   const [lastBackendQuestion, setLastBackendQuestion] = useState<BackendQuestionRequest | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const optionsRef = useRef(options);
+
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   useEffect(() => {
     // Construct WebSocket URL
@@ -57,10 +76,18 @@ function useLectureChannel(lectureId: string): UseLectureChannelReturn {
       console.log('[useLectureChannel] WebSocket opened');
 
       // Construct and validate init message
-      const initMessage = {
+      const initMessage: {
+        type: 'get_lecture_request';
+        lecture_id: string;
+        capabilities?: { audio_streaming?: boolean };
+      } = {
         type: 'get_lecture_request' as const,
         lecture_id: lectureId,
       };
+
+      if (optionsRef.current?.enableStreamingAudio) {
+        initMessage.capabilities = { audio_streaming: true };
+      }
 
       const validationResult = ZGetLectureRequest.safeParse(initMessage);
       if (!validationResult.success) {
@@ -133,6 +160,51 @@ function useLectureChannel(lectureId: string): UseLectureChannelReturn {
                 };
               });
             }
+            break;
+          }
+
+          case 'slide_audio_chunk': {
+            const chunkValidation = ZSlideAudioChunk.safeParse(message);
+            if (!chunkValidation.success) {
+              console.error('[useLectureChannel] Invalid slide_audio_chunk:', chunkValidation.error);
+              return;
+            }
+            optionsRef.current?.onAudioChunk?.(chunkValidation.data);
+            break;
+          }
+
+          case 'slide_audio_status': {
+            const statusValidation = ZSlideAudioStatus.safeParse(message);
+            if (!statusValidation.success) {
+              console.error('[useLectureChannel] Invalid slide_audio_status:', statusValidation.error);
+              return;
+            }
+
+            const status = statusValidation.data;
+            if (status.status === 'completed' && status.audio_url) {
+              setLecture((prev) => {
+                if (!prev) return prev;
+                if (!prev.slides?.[status.slide_index]) return prev;
+                const nextSlides = [...prev.slides];
+                nextSlides[status.slide_index] = {
+                  ...nextSlides[status.slide_index],
+                  audio_transcription_link: status.audio_url,
+                } as LectureSlide;
+                return { ...prev, slides: nextSlides };
+              });
+            }
+
+            optionsRef.current?.onAudioStatus?.(status);
+            break;
+          }
+
+          case 'slide_audio_buffer': {
+            const bufferValidation = ZSlideAudioBuffer.safeParse(message);
+            if (!bufferValidation.success) {
+              console.error('[useLectureChannel] Invalid slide_audio_buffer:', bufferValidation.error);
+              return;
+            }
+            optionsRef.current?.onAudioBuffer?.(bufferValidation.data);
             break;
           }
 
@@ -219,9 +291,30 @@ export default function MDXTestPage() {
   const [isAnswerPanelMinimized, setIsAnswerPanelMinimized] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const ENABLE_STREAMING_AUDIO = true;
+
+  const {
+    mediaStream,
+    streamingSlide,
+    streamingState,
+    handleChunk: handleAudioChunk,
+    handleStatus: handleAudioStatus,
+    handleBufferUpdate: handleAudioBuffer,
+  } = useLectureAudioStream();
+
+  const lectureChannelOptions = useMemo<UseLectureChannelOptions>(
+    () => ({
+      onAudioChunk: handleAudioChunk,
+      onAudioStatus: handleAudioStatus,
+      onAudioBuffer: handleAudioBuffer,
+      enableStreamingAudio: ENABLE_STREAMING_AUDIO,
+    }),
+    [handleAudioChunk, handleAudioStatus, handleAudioBuffer]
+  );
+
   // Use the new state machine hook
   const { phase, lecture, lastAnswer, lastBackendQuestion, askQuestion } =
-    useLectureChannel(lectureId || '');
+    useLectureChannel(lectureId || '', lectureChannelOptions);
 
   // Derive loading and error states from phase
   const loading = phase === 'connecting' || phase === 'awaiting_lecture';
@@ -268,6 +361,34 @@ export default function MDXTestPage() {
 
     audioEl.addEventListener('ended', handleEnded);
 
+    const currentStreamingInfo = streamingState[currentSlide];
+    const useStreamingForSlide = ENABLE_STREAMING_AUDIO && currentStreamingInfo?.mode === 'streaming';
+    const isStreamingCurrentSlide = useStreamingForSlide && streamingSlide === currentSlide && mediaStream;
+
+    if (isStreamingCurrentSlide && mediaStream) {
+      if (audioEl.srcObject !== mediaStream) {
+        audioEl.srcObject = mediaStream;
+        audioEl.removeAttribute('src');
+        audioEl.currentTime = 0;
+      }
+
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.warn('[MDXTestPage] Autoplay prevented for stream:', error);
+        });
+      }
+
+      return () => {
+        audioEl.pause();
+        audioEl.removeEventListener('ended', handleEnded);
+      };
+    }
+
+    if (audioEl.srcObject) {
+      audioEl.srcObject = null;
+    }
+
     if (slide?.audio_transcription_link) {
       audioEl.src = slide.audio_transcription_link;
       audioEl.currentTime = 0;
@@ -288,8 +409,17 @@ export default function MDXTestPage() {
       audioEl.pause();
       audioEl.removeEventListener('ended', handleEnded);
     };
-  }, [lecture, currentSlide]);
+  }, [lecture, currentSlide, streamingSlide, mediaStream, streamingState]);
+
+  const streamingInfo = streamingState[currentSlide];
+  const streamingMode = ENABLE_STREAMING_AUDIO && streamingInfo?.mode === 'streaming';
+  const navigationLocked = streamingMode && !streamingInfo?.readyToAdvance;
+  const streamingBufferSeconds = streamingInfo?.bufferedSeconds ?? 0;
+
   const nextSlide = () => {
+    if (navigationLocked) {
+      return;
+    }
     if (lecture && currentSlide < lecture.slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
     }
@@ -302,6 +432,9 @@ export default function MDXTestPage() {
   };
 
   const goToSlide = (index: number) => {
+    if (navigationLocked && index > currentSlide) {
+      return;
+    }
     setCurrentSlide(index);
   };
 
@@ -354,7 +487,8 @@ export default function MDXTestPage() {
   }
 
   const currentSlideData = lecture.slides[currentSlide];
-  const hasAudio = Boolean(currentSlideData.audio_transcription_link);
+  const isStreamingCurrentSlide = streamingMode && streamingSlide === currentSlide;
+  const hasAudio = isStreamingCurrentSlide || Boolean(currentSlideData.audio_transcription_link);
 
   const handleAskQuestion = () => {
     if (questionText.trim() && phase === 'ready') {
@@ -368,6 +502,18 @@ export default function MDXTestPage() {
       {/* Slide Display - Takes remaining space */}
       <div className="flex-1 overflow-hidden relative">
         <Slide lectureSlides={lecture.slides} i={currentSlide} />
+
+        {ENABLE_STREAMING_AUDIO && streamingMode && streamingInfo?.isBuffering && (
+          <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 text-white text-sm z-10">
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-10 w-10 border-2 border-white/60 border-t-transparent rounded-full animate-spin" aria-hidden />
+              <p className="font-semibold">Buffering narration…</p>
+              <p className="text-xs text-white/80">
+                {Math.max(0, streamingBufferSeconds).toFixed(1)}s buffered
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Present Button - Floating */}
         <button
@@ -473,10 +619,24 @@ export default function MDXTestPage() {
               Slide {currentSlide + 1}: {currentSlideData.title}
             </p>
             <p className="text-xs text-gray-500">
-              {hasAudio
-                ? 'Auto-playing audio narration. Advance manually at any time.'
-                : 'No audio narration available for this slide.'}
+              {isStreamingCurrentSlide
+                ? 'Streaming narration in progress. Audio will finalize shortly.'
+                : hasAudio
+                  ? 'Auto-playing audio narration. Advance manually at any time.'
+                  : 'No audio narration available for this slide.'}
             </p>
+            {streamingMode && (
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                <div
+                  className={`h-3 w-3 rounded-full ${streamingInfo?.isBuffering ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}
+                />
+                <span className="text-gray-600">
+                  {streamingInfo?.isBuffering
+                    ? `Buffering… ${streamingBufferSeconds.toFixed(1)}s ready`
+                    : 'Buffered and ready to advance'}
+                </span>
+              </div>
+            )}
           </div>
           <audio
             ref={audioRef}
@@ -546,10 +706,11 @@ export default function MDXTestPage() {
           {/* Next Button */}
           <button
             onClick={nextSlide}
-            disabled={currentSlide === lecture.slides.length - 1}
+            disabled={navigationLocked || currentSlide === lecture.slides.length - 1}
             className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            title={navigationLocked ? 'Waiting for narration to buffer' : 'Go to next slide'}
           >
-            Next →
+            {navigationLocked ? 'Buffering…' : 'Next →'}
           </button>
         </div>
 
@@ -563,6 +724,11 @@ export default function MDXTestPage() {
             Slide {currentSlide + 1} of {lecture.slides.length}
           </div>
         </div>
+        {navigationLocked && (
+          <div className="max-w-6xl mx-auto mt-2 text-xs text-yellow-300">
+            Narration is still buffering. Please wait a moment before advancing.
+          </div>
+        )}
       </div>
     </div>
   );

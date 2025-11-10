@@ -621,6 +621,7 @@ Static SVG assets used throughout the app:
 - `lecture_id` - Lecture stub ID
 - `answers` - Clarifying question answers
 - `augment_slides_instructions` - Optional custom instructions
+- `supports_streaming_audio` - Pass `1` to enable low-latency narration. Omit for legacy file-based playback.
 
 **Status Updates:**
 ```typescript
@@ -645,6 +646,7 @@ Static SVG assets used throughout the app:
   type: "completedAll"
 }
 ```
+- `tts` updates are emitted only when streaming is **disabled** so legacy clients can continue displaying narration progress.
 
 ---
 
