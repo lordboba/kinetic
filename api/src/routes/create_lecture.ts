@@ -507,15 +507,19 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
 
   const STREAM_READY_BUFFER_MS = 2_000;
 
-  const voiceoverTasks = ts.map(async (s, sidx) => {
-    let chunkIndex = 0;
-    let bufferedMs = 0;
-    lectureAudioStreamBroker.publishStatus({
-      type: "slide_audio_status",
-      lecture_id,
-      slide_index: sidx,
-      status: "started",
-    });
+  // LiveKit enforces <5 concurrent TTS streams; run sequentially for now to avoid rate-limit flakiness.
+  const voiceoverConcurrencyLimit = createLimiter(1);
+
+  const voiceoverTasks = ts.map((s, sidx) =>
+    voiceoverConcurrencyLimit(async () => {
+      let chunkIndex = 0;
+      let bufferedMs = 0;
+      lectureAudioStreamBroker.publishStatus({
+        type: "slide_audio_status",
+        lecture_id,
+        slide_index: sidx,
+        status: "started",
+      });
 
       const handleChunk = async (chunk: TtsStreamChunk) => {
         if (!chunk.frame) {
@@ -538,160 +542,163 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
           channels: chunk.frame.channels,
           samples_per_channel: chunk.frame.samplesPerChannel,
           pcm16: pcmBuffer,
-          transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
+          transcript_delta: chunk.deltaText?.trim()
+            ? chunk.deltaText
+            : undefined,
         });
 
-      const chunkDurationMs =
-        (chunk.frame.samplesPerChannel / chunk.frame.sampleRate) * 1000;
-      bufferedMs += chunkDurationMs;
-      lectureAudioStreamBroker.publishBuffer({
-        type: "slide_audio_buffer",
-        lecture_id,
-        slide_index: sidx,
-        chunk_index: chunkIndex,
-        buffered_ms: Math.round(bufferedMs),
-        ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
-      });
-    };
-
-    try {
-      const speech = await generateAvatarSpeech(
-        s.transcript,
-        {
-          format: "wav",
-          metadata: {
-            lectureId: lecture_id,
-            slideIndex: sidx,
-          },
-        },
-        {
-          onChunk: handleChunk,
-        }
-      );
-
-      let resolvedAudioUrl = speech.audioUrl;
-
-      if (resolvedAudioUrl?.startsWith("data:")) {
-        try {
-          const upload = await uploadVoiceoverDataUrl({
-            dataUrl: resolvedAudioUrl,
-            lectureId: lecture_id,
-            slideIndex: sidx,
-            customMetadata: {
-              requestId: speech.requestId ?? undefined,
-            },
-            cacheControl: "public,max-age=31536000,immutable",
-          });
-          resolvedAudioUrl = upload.signedUrl;
-          req.log.info(
-            {
-              lecture_id,
-              slide_index: sidx,
-              storage_path: upload.storagePath,
-            },
-            "[LectureGen] Voiceover data URL persisted to storage"
-          );
-        } catch (persistError) {
-          req.log.error(
-            {
-              lecture_id,
-              slide_index: sidx,
-              error:
-                persistError instanceof Error
-                  ? persistError.message
-                  : persistError,
-            },
-            "[LectureGen] Failed to persist voiceover data URL; falling back to inline data"
-          );
-        }
-      }
-
-      if (resolvedAudioUrl) {
-        lec.slides![sidx].audio_transcription_link = resolvedAudioUrl;
-        try {
-          await lecturePersisted;
-          await lectureDoc(lecture_id).update({
-            [`slides.${sidx}.audio_transcription_link`]: resolvedAudioUrl,
-          });
-        } catch (updateError) {
-          req.log.error(
-            {
-              lecture_id,
-              slide_index: sidx,
-              error:
-                updateError instanceof Error
-                  ? updateError.message
-                  : updateError,
-            },
-            "[LectureGen] Failed to persist voiceover link"
-          );
-        }
-      }
-
-      lectureAudioStreamBroker.publishStatus({
-        type: "slide_audio_status",
-        lecture_id,
-        slide_index: sidx,
-        status: "completed",
-        audio_url: resolvedAudioUrl,
-      });
-
-      lectureAudioStreamBroker.publishBuffer({
-        type: "slide_audio_buffer",
-        lecture_id,
-        slide_index: sidx,
-        chunk_index: chunkIndex,
-        buffered_ms: Math.round(bufferedMs),
-        ready_to_advance: true,
-        is_complete: true,
-      });
-
-      const currentCount = ++completedAudioCount;
-      req.log.info(
-        {
+        const chunkDurationMs =
+          (chunk.frame.samplesPerChannel / chunk.frame.sampleRate) * 1000;
+        bufferedMs += chunkDurationMs;
+        lectureAudioStreamBroker.publishBuffer({
+          type: "slide_audio_buffer",
           lecture_id,
           slide_index: sidx,
-          audio_number: currentCount,
-          total_audio: ttsCount,
-        },
-        "[LectureGen] Voiceover generated"
-      );
+          chunk_index: chunkIndex,
+          buffered_ms: Math.round(bufferedMs),
+          ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+        });
+      };
 
-      if (!supportsStreamingAudio) {
-        ws.send(
-          JSON.stringify({
-            type: "completedOne",
-            completed: "tts",
-            counter: currentCount,
-          } satisfies CreateLectureStatusUpdate)
+      try {
+        const speech = await generateAvatarSpeech(
+          s.transcript,
+          {
+            format: "wav",
+            metadata: {
+              lectureId: lecture_id,
+              slideIndex: sidx,
+            },
+          },
+          {
+            onChunk: handleChunk,
+          }
+        );
+
+        let resolvedAudioUrl = speech.audioUrl;
+
+        if (resolvedAudioUrl?.startsWith("data:")) {
+          try {
+            const upload = await uploadVoiceoverDataUrl({
+              dataUrl: resolvedAudioUrl,
+              lectureId: lecture_id,
+              slideIndex: sidx,
+              customMetadata: {
+                requestId: speech.requestId ?? undefined,
+              },
+              cacheControl: "public,max-age=31536000,immutable",
+            });
+            resolvedAudioUrl = upload.signedUrl;
+            req.log.info(
+              {
+                lecture_id,
+                slide_index: sidx,
+                storage_path: upload.storagePath,
+              },
+              "[LectureGen] Voiceover data URL persisted to storage"
+            );
+          } catch (persistError) {
+            req.log.error(
+              {
+                lecture_id,
+                slide_index: sidx,
+                error:
+                  persistError instanceof Error
+                    ? persistError.message
+                    : persistError,
+              },
+              "[LectureGen] Failed to persist voiceover data URL; falling back to inline data"
+            );
+          }
+        }
+
+        if (resolvedAudioUrl) {
+          lec.slides![sidx].audio_transcription_link = resolvedAudioUrl;
+          try {
+            await lecturePersisted;
+            await lectureDoc(lecture_id).update({
+              [`slides.${sidx}.audio_transcription_link`]: resolvedAudioUrl,
+            });
+          } catch (updateError) {
+            req.log.error(
+              {
+                lecture_id,
+                slide_index: sidx,
+                error:
+                  updateError instanceof Error
+                    ? updateError.message
+                    : updateError,
+              },
+              "[LectureGen] Failed to persist voiceover link"
+            );
+          }
+        }
+
+        lectureAudioStreamBroker.publishStatus({
+          type: "slide_audio_status",
+          lecture_id,
+          slide_index: sidx,
+          status: "completed",
+          audio_url: resolvedAudioUrl,
+        });
+
+        lectureAudioStreamBroker.publishBuffer({
+          type: "slide_audio_buffer",
+          lecture_id,
+          slide_index: sidx,
+          chunk_index: chunkIndex,
+          buffered_ms: Math.round(bufferedMs),
+          ready_to_advance: true,
+          is_complete: true,
+        });
+
+        const currentCount = ++completedAudioCount;
+        req.log.info(
+          {
+            lecture_id,
+            slide_index: sidx,
+            audio_number: currentCount,
+            total_audio: ttsCount,
+          },
+          "[LectureGen] Voiceover generated"
+        );
+
+        if (!supportsStreamingAudio) {
+          ws.send(
+            JSON.stringify({
+              type: "completedOne",
+              completed: "tts",
+              counter: currentCount,
+            } satisfies CreateLectureStatusUpdate)
+          );
+        }
+      } catch (error) {
+        lectureAudioStreamBroker.publishStatus({
+          type: "slide_audio_status",
+          lecture_id,
+          slide_index: sidx,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        lectureAudioStreamBroker.publishBuffer({
+          type: "slide_audio_buffer",
+          lecture_id,
+          slide_index: sidx,
+          chunk_index: chunkIndex,
+          buffered_ms: Math.round(bufferedMs),
+          ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
+        });
+        req.log.error(
+          {
+            lecture_id,
+            slide_index: sidx,
+            error: error instanceof Error ? error.message : error,
+          },
+          "[LectureGen] Voiceover generation failed"
         );
       }
-    } catch (error) {
-      lectureAudioStreamBroker.publishStatus({
-        type: "slide_audio_status",
-        lecture_id,
-        slide_index: sidx,
-        status: "error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-      lectureAudioStreamBroker.publishBuffer({
-        type: "slide_audio_buffer",
-        lecture_id,
-        slide_index: sidx,
-        chunk_index: chunkIndex,
-        buffered_ms: Math.round(bufferedMs),
-        ready_to_advance: bufferedMs >= STREAM_READY_BUFFER_MS,
-      });
-      req.log.error(
-        {
-          lecture_id,
-          slide_index: sidx,
-          error: error instanceof Error ? error.message : error,
-        },
-        "[LectureGen] Voiceover generation failed"
-      );
-    }
-  });
+    })
+  );
 
   await Promise.all([
     ...diagramTasks, // Diagram Tasks

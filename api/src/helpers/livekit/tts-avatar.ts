@@ -1,6 +1,7 @@
 import { inference, tts as ttsNamespace } from '@livekit/agents';
 import { AudioFrame } from '@livekit/rtc-node';
 import { randomUUID } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 
 import { z } from 'zod';
 
@@ -10,6 +11,17 @@ import {
   DEFAULT_VOICEOVER_SIGNED_URL_TTL_MS,
   uploadVoiceoverBuffer,
 } from '../storage/voiceovers.js';
+
+function parseEnvInteger(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+const CHUNK_LOG_LIMIT = parseEnvInteger(process.env.LIVEKIT_TTS_CHUNK_LOG_LIMIT, 3);
+const FIRST_CHUNK_TIMEOUT_MS = parseEnvInteger(process.env.LIVEKIT_TTS_FIRST_CHUNK_TIMEOUT_MS, 15_000);
 
 export type TtsStreamChunk = {
   requestId?: string;
@@ -107,13 +119,75 @@ export async function synthesizeAvatarSpeech(
     apiSecret: inferenceConfig?.apiSecret ?? secret,
   });
 
+  const logLiveKitError = (error: unknown) => {
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      };
+    }
+    if (typeof error === 'object' && error !== null) {
+      return {
+        ...(error as Record<string, unknown>),
+      };
+    }
+    return { message: String(error) };
+  };
+
+  ttsClient.on('error', (event) => {
+    // eslint-disable-next-line no-console
+    console.error('[TTS] LiveKit client emitted error event:', {
+      label: event.label,
+      recoverable: event.recoverable,
+      timestamp: event.timestamp,
+      details: logLiveKitError(event.error),
+    });
+  });
+
+  ttsClient.on('metrics_collected', (metrics) => {
+    // eslint-disable-next-line no-console
+    console.log('[TTS] LiveKit metrics collected:', {
+      requestId: metrics.requestId,
+      characters: metrics.charactersCount,
+      durationMs: metrics.durationMs,
+      ttfbMs: metrics.ttfbMs,
+      audioDurationMs: metrics.audioDurationMs,
+      cancelled: metrics.cancelled,
+      streamed: metrics.streamed,
+      label: metrics.label,
+    });
+  });
+
+  const metadata = payload.metadata ?? {};
+  const lectureIdRaw =
+    metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).lectureId : undefined;
+  const slideIndexRaw =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>).slideIndex ??
+        (metadata as Record<string, unknown>).slide_index
+      : undefined;
+
+  const lectureId =
+    typeof lectureIdRaw === 'string' && lectureIdRaw.length > 0 ? lectureIdRaw : undefined;
+  const slideIndexValue =
+    typeof slideIndexRaw === 'number'
+      ? slideIndexRaw
+      : Number.isFinite(Number.parseInt(String(slideIndexRaw ?? ''), 10))
+        ? Number.parseInt(String(slideIndexRaw ?? ''), 10)
+        : undefined;
+
   // eslint-disable-next-line no-console
   console.log('[TTS] Starting stream...');
   const stream = ttsClient.stream();
 
-  stream.pushText(payload.text);
-  stream.flush();
-  stream.endInput();
+  const textStream = new ReadableStream<string>({
+    start(controller) {
+      controller.enqueue(payload.text);
+      controller.close();
+    },
+  });
+  stream.updateInputStream(textStream);
   // eslint-disable-next-line no-console
   console.log('[TTS] Text pushed to stream, waiting for audio chunks...');
 
@@ -123,6 +197,22 @@ export async function synthesizeAvatarSpeech(
   let firstFrameTimestamp: number | undefined;
   const startTime = Date.now();
   let chunkCount = 0;
+  let loggedChunkSummaries = 0;
+  let firstChunkWarningTimer: ReturnType<typeof setTimeout> | null = null;
+  if (FIRST_CHUNK_TIMEOUT_MS > 0) {
+    firstChunkWarningTimer = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.warn('[TTS] No audio chunks received yet; waiting on LiveKit stream', {
+        textLength: payload.text.length,
+        voice: resolvedVoice,
+        model: resolvedModel,
+        language: payload.language,
+        lectureId,
+        slideIndex: slideIndexValue,
+        timeoutMs: FIRST_CHUNK_TIMEOUT_MS,
+      });
+    }, FIRST_CHUNK_TIMEOUT_MS);
+  }
 
   // eslint-disable-next-line no-console
   console.log(`[TTS] Stream started (model=${resolvedModel}, voice=${resolvedVoice ?? 'default'})`);
@@ -136,6 +226,25 @@ export async function synthesizeAvatarSpeech(
       }
 
       chunkCount++;
+      if (loggedChunkSummaries < CHUNK_LOG_LIMIT) {
+        loggedChunkSummaries += 1;
+        // eslint-disable-next-line no-console
+        console.log(`[TTS] Chunk summary #${chunkCount}:`, {
+          requestId: chunk.requestId,
+          deltaChars: chunk.deltaText?.length ?? 0,
+          hasFrame: !!chunk.frame,
+          frameSampleRate: chunk.frame?.sampleRate,
+          frameChannels: chunk.frame?.channels,
+          frameSamplesPerChannel: chunk.frame?.samplesPerChannel,
+          isFinal: (chunk as { final?: boolean }).final ?? false,
+          segmentId: (chunk as { segmentId?: string }).segmentId,
+        });
+      }
+
+      if (chunkCount === 1 && firstChunkWarningTimer) {
+        clearTimeout(firstChunkWarningTimer);
+        firstChunkWarningTimer = null;
+      }
       // eslint-disable-next-line no-console
       /*
       console.log(`[TTS] Chunk #${chunkCount}:`, {
@@ -184,6 +293,19 @@ export async function synthesizeAvatarSpeech(
     });
 
     if (frames.length === 0) {
+      const errorMetadata = {
+        requestId,
+        textLength: payload.text.length,
+        lectureId,
+        slideIndex: slideIndexValue,
+        model: resolvedModel,
+        voice: resolvedVoice,
+        language: payload.language,
+        chunkCount,
+        chunkSummariesLogged: loggedChunkSummaries,
+      };
+      // eslint-disable-next-line no-console
+      console.error('[TTS] Stream returned zero audio frames:', errorMetadata);
       throw new Error('LiveKit TTS did not return any audio frames');
     }
 
@@ -201,17 +323,6 @@ export async function synthesizeAvatarSpeech(
     });
 
     const resolvedRequestId = requestId ?? randomUUID();
-
-    const metadata = payload.metadata ?? {};
-    const lectureIdRaw = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).lectureId : undefined;
-    const slideIndexRaw = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).slideIndex ?? (metadata as Record<string, unknown>).slide_index : undefined;
-
-    const lectureId = typeof lectureIdRaw === 'string' && lectureIdRaw.length > 0 ? lectureIdRaw : undefined;
-    const slideIndexValue = typeof slideIndexRaw === 'number'
-      ? slideIndexRaw
-      : Number.isFinite(Number.parseInt(String(slideIndexRaw ?? ''), 10))
-        ? Number.parseInt(String(slideIndexRaw ?? ''), 10)
-        : undefined;
 
     let audioUrl: string | undefined;
     try {
@@ -275,5 +386,21 @@ export async function synthesizeAvatarSpeech(
     // eslint-disable-next-line no-console
     console.error('[TTS] Error during synthesis:', error);
     throw error;
+  } finally {
+    if (firstChunkWarningTimer) {
+      clearTimeout(firstChunkWarningTimer);
+    }
+    try {
+      stream.close();
+    } catch (closeError) {
+      // eslint-disable-next-line no-console
+      console.warn('[TTS] Failed to close TTS stream cleanly:', closeError);
+    }
+    try {
+      await ttsClient.close();
+    } catch (clientCloseError) {
+      // eslint-disable-next-line no-console
+      console.warn('[TTS] Failed to close TTS client cleanly:', clientCloseError);
+    }
   }
 }

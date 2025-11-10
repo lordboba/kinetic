@@ -6,6 +6,7 @@ import { Slide } from '@/components/slides/Slide';
 import { useSearchParams } from 'next/navigation';
 import { getBackendEndpoint } from '@/lib/env';
 import { useLectureAudioStream } from '@/lib/useLectureAudioStream';
+import { useSpeechToText } from '@/lib/useSpeechToText';
 import type { LectureSlide, Lecture } from 'schema';
 import {
   ZGetLectureRequest,
@@ -293,6 +294,7 @@ export default function MDXTestPage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [questionText, setQuestionText] = useState('');
   const [isAnswerPanelMinimized, setIsAnswerPanelMinimized] = useState(false);
+  const [isAudioPaused, setIsAudioPaused] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const ENABLE_STREAMING_AUDIO = true;
@@ -320,6 +322,21 @@ export default function MDXTestPage() {
   const { phase, lecture, lastAnswer, lastBackendQuestion, askQuestion } =
     useLectureChannel(lectureId || '', lectureChannelOptions);
 
+  // Speech-to-text hook
+  const { isRecording, isProcessing, audioLevel, startRecording, stopRecording } = useSpeechToText({
+    onTranscript: (text) => {
+      console.log('[STT] Transcript received:', text);
+      // Automatically ask the question with the transcript
+      if (text.trim() && phase === 'ready') {
+        askQuestion(currentSlide, text);
+      }
+    },
+    onError: (error) => {
+      console.error('[STT] Error:', error);
+      alert(`Speech recognition error: ${error}`);
+    },
+  });
+
   // Derive loading and error states from phase
   const loading = phase === 'connecting' || phase === 'awaiting_lecture';
   const error = !lectureId
@@ -328,21 +345,57 @@ export default function MDXTestPage() {
       ? 'Failed to connect to server. Please try again.'
       : null;
 
-  // keyboard navigation
+  // keyboard navigation and push-to-talk
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!lecture) return;
+
+      // Ignore if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
 
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         nextSlide();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         prevSlide();
+      } else if (e.key === ' ' && !isRecording && phase === 'ready') {
+        // Space bar pressed - pause audio and start recording
+        e.preventDefault();
+
+        // Pause audio playback
+        const audioEl = audioRef.current;
+        if (audioEl && !audioEl.paused) {
+          audioEl.pause();
+          setIsAudioPaused(true);
+        }
+
+        startRecording();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if (e.key === ' ' && isRecording) {
+        // Space bar released - stop recording
+        e.preventDefault();
+        stopRecording();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentSlide, lecture]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [currentSlide, lecture, isRecording, phase, startRecording, stopRecording, audioRef]);
 
   useEffect(() => {
     if (!lecture) {
@@ -421,9 +474,21 @@ export default function MDXTestPage() {
   const streamingBufferSeconds = streamingInfo?.bufferedSeconds ?? 0;
 
   const nextSlide = () => {
+    // Check if we have audio before allowing navigation
+    const currentSlideData = lecture?.slides[currentSlide];
+    const isStreamingCurrentSlide = streamingMode && streamingSlide === currentSlide;
+    const hasAudioForCurrentSlide = isStreamingCurrentSlide || Boolean(currentSlideData?.audio_transcription_link);
+
     if (navigationLocked) {
       return;
     }
+
+    // Block navigation if no audio is available for current slide
+    if (!hasAudioForCurrentSlide) {
+      console.warn('[MDXTestPage] Cannot advance: waiting for audio to be available');
+      return;
+    }
+
     if (lecture && currentSlide < lecture.slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
     }
@@ -493,11 +558,27 @@ export default function MDXTestPage() {
   const currentSlideData = lecture.slides[currentSlide];
   const isStreamingCurrentSlide = streamingMode && streamingSlide === currentSlide;
   const hasAudio = isStreamingCurrentSlide || Boolean(currentSlideData.audio_transcription_link);
+  const isWaitingForAudio = !hasAudio;
 
   const handleAskQuestion = () => {
     if (questionText.trim() && phase === 'ready') {
       askQuestion(currentSlide, questionText);
       setQuestionText('');
+    }
+  };
+
+  const toggleAudioPause = () => {
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+
+    if (audioEl.paused) {
+      audioEl.play().catch(error => {
+        console.warn('[MDXTestPage] Failed to play audio:', error);
+      });
+      setIsAudioPaused(false);
+    } else {
+      audioEl.pause();
+      setIsAudioPaused(true);
     }
   };
 
@@ -514,6 +595,19 @@ export default function MDXTestPage() {
               <p className="font-semibold">Buffering narration…</p>
               <p className="text-xs text-white/80">
                 {Math.max(0, streamingBufferSeconds).toFixed(1)}s buffered
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Waiting for Audio Overlay */}
+        {isWaitingForAudio && !streamingInfo?.isBuffering && (
+          <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-[1px] flex flex-col items-center justify-center gap-3 text-white text-sm z-10">
+            <div className="flex flex-col items-center gap-2">
+              <div className="h-10 w-10 border-2 border-white/60 border-t-transparent rounded-full animate-spin" aria-hidden />
+              <p className="font-semibold">Generating audio narration…</p>
+              <p className="text-xs text-white/80">
+                Please wait while the audio is being created for this slide
               </p>
             </div>
           </div>
@@ -547,6 +641,50 @@ export default function MDXTestPage() {
                   : 'Loading lecture...'}
           </span>
         </div>
+
+        {/* Recording Indicator and Audio Visualization - Floating */}
+        {(isRecording || isProcessing) && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-4 bg-red-500 text-white rounded-lg shadow-2xl flex items-center gap-4 min-w-[300px]">
+            <div className="flex items-center gap-2">
+              {isRecording ? (
+                <>
+                  <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
+                  <span className="font-semibold">Recording...</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-3 h-3 rounded-full bg-white animate-spin border-2 border-transparent border-t-red-500" />
+                  <span className="font-semibold">Processing...</span>
+                </>
+              )}
+            </div>
+            {isRecording && (
+              <div className="flex-1 flex items-center gap-1 h-8">
+                {/* Audio visualization bars */}
+                {[...Array(20)].map((_, i) => {
+                  const height = Math.max(10, audioLevel * 100 * (0.5 + Math.random() * 0.5));
+                  return (
+                    <div
+                      key={i}
+                      className="flex-1 bg-white rounded-full transition-all duration-100"
+                      style={{
+                        height: `${height}%`,
+                        opacity: 0.6 + audioLevel * 0.4,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Push-to-Talk Hint - Floating */}
+        {!isRecording && !isProcessing && phase === 'ready' && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-gray-800/80 text-white rounded-lg shadow-lg text-xs backdrop-blur-sm">
+            Hold <kbd className="px-2 py-1 bg-gray-700 rounded font-mono">Space</kbd> to ask a question via voice
+          </div>
+        )}
       </div>
 
       {/* Question/Answer Panel - Conditionally rendered */}
@@ -642,12 +780,33 @@ export default function MDXTestPage() {
               </div>
             )}
           </div>
-          <audio
-            ref={audioRef}
-            controls
-            className="w-full sm:w-auto"
-            aria-label="Slide audio narration"
-          />
+          <div className="flex items-center gap-3">
+            {/* Pause/Play Button */}
+            {hasAudio && (
+              <button
+                onClick={toggleAudioPause}
+                className="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                aria-label={isAudioPaused ? 'Play audio' : 'Pause audio'}
+                title={isAudioPaused ? 'Play audio' : 'Pause audio'}
+              >
+                {isAudioPaused ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75A.75.75 0 007.25 3h-1.5zM12.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-1.5z" />
+                  </svg>
+                )}
+              </button>
+            )}
+            <audio
+              ref={audioRef}
+              controls
+              className="w-full sm:w-auto"
+              aria-label="Slide audio narration"
+            />
+          </div>
         </div>
       </div>
 
@@ -710,11 +869,11 @@ export default function MDXTestPage() {
           {/* Next Button */}
           <button
             onClick={nextSlide}
-            disabled={navigationLocked || currentSlide === lecture.slides.length - 1}
+            disabled={navigationLocked || isWaitingForAudio || currentSlide === lecture.slides.length - 1}
             className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors font-medium text-sm"
-            title={navigationLocked ? 'Waiting for narration to buffer' : 'Go to next slide'}
+            title={navigationLocked ? 'Waiting for narration to buffer' : isWaitingForAudio ? 'Waiting for audio to be generated' : 'Go to next slide'}
           >
-            {navigationLocked ? 'Buffering…' : 'Next →'}
+            {navigationLocked ? 'Buffering…' : isWaitingForAudio ? 'Waiting for audio…' : 'Next →'}
           </button>
         </div>
 
@@ -731,6 +890,11 @@ export default function MDXTestPage() {
         {navigationLocked && (
           <div className="max-w-6xl mx-auto mt-2 text-xs text-yellow-300">
             Narration is still buffering. Please wait a moment before advancing.
+          </div>
+        )}
+        {isWaitingForAudio && !navigationLocked && (
+          <div className="max-w-6xl mx-auto mt-2 text-xs text-yellow-300">
+            Audio is being generated for this slide. Please wait before advancing.
           </div>
         )}
       </div>

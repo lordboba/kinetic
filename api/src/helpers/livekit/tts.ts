@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
+import { getLiveKitConfig } from './config.js';
 import type { SynthesizeAvatarSpeechResponse, TtsStreamCallbacks } from './tts-avatar.js';
 import { AvatarStyleOptionsSchema, SynthesizeAvatarSpeechResponseSchema, synthesizeAvatarSpeech } from './tts-avatar.js';
 
@@ -46,14 +47,25 @@ export async function generateAvatarSpeech(
     throw new Error('Input text must be a non-empty string');
   }
 
+  const config = getLiveKitConfig();
+  const inferenceDefaults = config.inference ?? {};
+  const resolvedVoice = options.voice ?? inferenceDefaults.defaultTtsVoice ?? DEFAULT_VOICE;
+  const resolvedModel = options.model ?? inferenceDefaults.defaultTtsModel;
+
+  if (!resolvedModel) {
+    throw new Error(
+      'LiveKit TTS model is not configured. Provide options.model or set LIVEKIT_INFERENCE_TTS_MODEL environment variable.',
+    );
+  }
+
   const synthesisPayload = {
     text: normalized,
-    voice: options.voice ?? DEFAULT_VOICE,
+    voice: resolvedVoice,
     format: options.format ?? 'wav',
     language: options.language ?? 'en',
     avatar: options.avatar,
     metadata: options.metadata,
-    model: options.model,
+    model: resolvedModel,
   };
 
   // eslint-disable-next-line no-console

@@ -47,7 +47,7 @@ export function getLiveKitConfig(): LiveKitConfig {
   const requestTimeoutMs =
     timeoutOverride !== undefined ? Number.parseInt(timeoutOverride, 10) || DEFAULT_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 
-  const inferenceBaseUrl = process.env.LIVEKIT_INFERENCE_URL ?? undefined;
+  const inferenceBaseUrl = (process.env.LIVEKIT_INFERENCE_URL ?? websocketUrl) || undefined;
   const inferenceApiKey = process.env.LIVEKIT_INFERENCE_API_KEY ?? undefined;
   const inferenceApiSecret =
     process.env.LIVEKIT_INFERENCE_API_SECRET ?? process.env.LIVEKIT_INFERENCE_API_SECRET_KEY ?? undefined;

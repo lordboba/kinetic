@@ -5,6 +5,10 @@ import {
   createTtsWebsocketHandler,
 } from "./tts-websocket.js";
 import {
+  createSttWebsocketHandler,
+  createHttpHandler as createSttHttpHandler,
+} from "./stt-websocket.js";
+import {
   create_lecture_initial,
   create_lecture_main,
 } from "./create_lecture.js";
@@ -133,6 +137,13 @@ export function registerRoutes(
     url: "/api/tts",
     handler: createTtsHttpHandler(),
     wsHandler: createTtsWebsocketHandler(),
+  });
+
+  app.route({
+    method: "GET",
+    url: "/api/stt",
+    handler: createSttHttpHandler(),
+    wsHandler: createSttWebsocketHandler(),
   });
 
   app.route({
