@@ -306,7 +306,7 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
   let ts;
   try {
     ts = await generate_transcript(
-      llm,
+      haikuLlm,
       {
         ...cached,
         answers,
