@@ -17,6 +17,7 @@ import {
 // added for S7 lecture gen
 import { watch_lecture } from "./watch_lecture.js";
 import { get_lectures } from "./get_lectures.js";
+import { delete_lecture } from "./delete_lecture.js";
 
 // HTTP handler for WebSocket-only lecture endpoint
 const createLectureHttpHandler = (): RouteHandler => {
@@ -139,5 +140,12 @@ export function registerRoutes(
     url: "/api/get_lectures",
     preHandler: verify_firebase_token,
     handler: get_lectures,
+  });
+
+  app.route({
+    method: "DELETE",
+    url: "/api/lectures/:lecture_id",
+    preHandler: verify_firebase_token,
+    handler: delete_lecture,
   });
 }

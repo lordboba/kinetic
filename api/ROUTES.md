@@ -16,6 +16,7 @@ This document provides a comprehensive index of all API routes and their corresp
 | `/api/users/profile` | POST | HTTP | Yes | `user_profile.ts:94` |
 | `/api/tts` | GET | WebSocket | No | `tts-websocket.ts:35` |
 | `/api/get_lectures` | GET | HTTP | Yes | `get_lectures.ts:11` |
+| `/api/lectures/:lecture_id` | DELETE | HTTP | Yes | `delete_lecture.ts:11` |
 
 ---
 
@@ -369,6 +370,31 @@ This document provides a comprehensive index of all API routes and their corresp
 **Notes:**
 - Returns all lectures associated with the authenticated user
 - Fetches lecture IDs from user profile, then fetches lecture topics from Firestore
+
+---
+
+### 9. Delete Lecture
+
+**Endpoint:** `DELETE /api/lectures/:lecture_id`
+**File:** `api/src/routes/delete_lecture.ts:11`
+**Handler:** `delete_lecture`
+**Auth:** `verify_firebase_token` (required)
+
+**Request:** Path parameter `lecture_id` (string)
+
+**Response:**
+```typescript
+{
+  success: boolean,
+  lecture_id: string,
+  removed_from_profiles: number
+}
+```
+
+**Notes:**
+- Only users listed in `permitted_users` (typically the lecture creator) can delete
+- Removes the lecture document from Firestore
+- Attempts to remove the lecture ID from every permitted user's profile so dashboards stay in sync
 
 ---
 
