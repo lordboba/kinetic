@@ -181,7 +181,9 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
     // Send lecture snapshot back to client (validated when possible)
     send(validation.success ? validation.data : response);
 
-    lectureAudioStreamBroker.addSubscriber(lectureId, ws);
+    lectureAudioStreamBroker.addSubscriber(lectureId, ws, {
+      acceptsChunks: audioStreamingEnabled,
+    });
   }
 
   async function handleUserInitiatedRequest(msg: UserQuestionRequest) {
@@ -385,7 +387,7 @@ export const watch_lecture: WebsocketHandler = async (ws, req) => {
             sample_rate: chunk.frame.sampleRate,
             channels: chunk.frame.channels,
             samples_per_channel: chunk.frame.samplesPerChannel,
-            pcm16_base64: pcmBuffer.toString("base64"),
+            pcm16: pcmBuffer,
             transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
           });
 

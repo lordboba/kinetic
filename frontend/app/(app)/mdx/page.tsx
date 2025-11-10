@@ -14,21 +14,21 @@ import {
   ZUserQuestionResponse,
   ZBackendQuestionRequest,
   ZOutboundMessage,
-  ZSlideAudioChunk,
   ZSlideAudioStatus,
   ZSlideAudioBuffer,
   type GetLectureResponse,
   type UserQuestionResponse,
   type BackendQuestionRequest,
-  type SlideAudioChunk,
   type SlideAudioStatus,
   type SlideAudioBuffer,
 } from 'schema/zod_types';
+import type { BinarySlideAudioChunk } from '@/lib/audioStreamProtocol';
+import { parseBinaryAudioChunk } from '@/lib/audioStreamProtocol';
 
 type ClientPhase = 'disconnected' | 'connecting' | 'awaiting_lecture' | 'ready';
 
 interface UseLectureChannelOptions {
-  onAudioChunk?: (chunk: SlideAudioChunk) => void;
+  onAudioChunk?: (chunk: BinarySlideAudioChunk) => void;
   onAudioStatus?: (status: SlideAudioStatus) => void;
   onAudioBuffer?: (buffer: SlideAudioBuffer) => void;
   enableStreamingAudio?: boolean;
@@ -70,6 +70,7 @@ function useLectureChannel(lectureId: string, options?: UseLectureChannelOptions
     // Create WebSocket and move to connecting
     setPhase('connecting');
     const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -103,7 +104,20 @@ function useLectureChannel(lectureId: string, options?: UseLectureChannelOptions
       setPhase('awaiting_lecture');
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
+      if (typeof event.data !== 'string') {
+        try {
+          const arrayBuffer = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+          const parsedChunk = parseBinaryAudioChunk(arrayBuffer);
+          if (parsedChunk) {
+            optionsRef.current?.onAudioChunk?.(parsedChunk);
+          }
+        } catch (error) {
+          console.error('[useLectureChannel] Failed to parse binary chunk:', error);
+        }
+        return;
+      }
+
       console.log('[useLectureChannel] Message received:', event.data);
 
       try {
@@ -160,16 +174,6 @@ function useLectureChannel(lectureId: string, options?: UseLectureChannelOptions
                 };
               });
             }
-            break;
-          }
-
-          case 'slide_audio_chunk': {
-            const chunkValidation = ZSlideAudioChunk.safeParse(message);
-            if (!chunkValidation.success) {
-              console.error('[useLectureChannel] Invalid slide_audio_chunk:', chunkValidation.error);
-              return;
-            }
-            optionsRef.current?.onAudioChunk?.(chunkValidation.data);
             break;
           }
 

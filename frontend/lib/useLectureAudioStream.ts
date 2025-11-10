@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import type { Buffer } from 'buffer';
-import type { SlideAudioBuffer, SlideAudioChunk, SlideAudioStatus } from 'schema/zod_types';
+import type { SlideAudioBuffer, SlideAudioStatus } from 'schema/zod_types';
+import type { BinarySlideAudioChunk } from './audioStreamProtocol';
 
 const PCM_MAX_VALUE = 32768;
 const MIN_INITIAL_BUFFER_SEC = 2.5;
@@ -25,26 +25,11 @@ export type SlideStreamSnapshot = {
   lastChunkIndex: number;
 };
 
-function decodePcm16(base64: string): Int16Array {
-  const binary = typeof atob === 'function'
-    ? atob(base64)
-    : typeof globalThis !== 'undefined' && typeof (globalThis as { Buffer?: typeof Buffer }).Buffer !== 'undefined'
-      ? (globalThis as { Buffer?: typeof Buffer }).Buffer!.from(base64, 'base64').toString('binary')
-      : '';
-  const len = binary.length;
-  const buffer = new ArrayBuffer(len);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < len; i += 1) {
-    view[i] = binary.charCodeAt(i);
-  }
-  return new Int16Array(buffer);
-}
-
 export function useLectureAudioStream() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const slidePlaybackRef = useRef<Record<number, SlidePlaybackState>>({});
-  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const activeSourcesRef = useRef<Map<number, Set<AudioBufferSourceNode>>>(new Map());
 
   const [streamingSlide, setStreamingSlide] = useState<number | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
@@ -67,15 +52,19 @@ export function useLectureAudioStream() {
     return { ctx: audioContextRef.current, destination: destinationRef.current };
   }, []);
 
-  const stopAllSources = useCallback(() => {
-    for (const source of activeSourcesRef.current) {
+  const stopSlideSources = useCallback((slideIndex: number) => {
+    const sources = activeSourcesRef.current.get(slideIndex);
+    if (!sources) {
+      return;
+    }
+    for (const source of sources) {
       try {
         source.stop();
       } catch (error) {
         console.warn('[useLectureAudioStream] Failed to stop source', error);
       }
     }
-    activeSourcesRef.current.clear();
+    sources.clear();
   }, []);
 
   const ensureSlideState = useCallback(
@@ -130,9 +119,16 @@ export function useLectureAudioStream() {
         const startAt = Math.max(state.nextStartTime, now + 0.02);
         source.start(startAt);
         state.nextStartTime = startAt + duration;
-        activeSourcesRef.current.add(source);
+        if (!activeSourcesRef.current.has(slideIndex)) {
+          activeSourcesRef.current.set(slideIndex, new Set());
+        }
+        const slideSources = activeSourcesRef.current.get(slideIndex)!;
+        slideSources.add(source);
         source.onended = () => {
-          activeSourcesRef.current.delete(source);
+          slideSources.delete(source);
+          if (slideSources.size === 0) {
+            activeSourcesRef.current.delete(slideIndex);
+          }
         };
       }
 
@@ -154,37 +150,36 @@ export function useLectureAudioStream() {
   );
 
   const handleChunk = useCallback(
-    (chunk: SlideAudioChunk) => {
+    (chunk: BinarySlideAudioChunk) => {
       const { ctx } = ensureGraph();
       if (!ctx) {
         return;
       }
 
-      if (chunk.samples_per_channel <= 0 || chunk.channels <= 0) {
+      if (chunk.samplesPerChannel <= 0 || chunk.channels <= 0) {
         console.warn('[useLectureAudioStream] Invalid chunk metadata', chunk);
         return;
       }
 
-      const samples = decodePcm16(chunk.pcm16_base64);
-      const expectedSamples = chunk.samples_per_channel * chunk.channels;
-      if (samples.length !== expectedSamples) {
+      const expectedSamples = chunk.samplesPerChannel * chunk.channels;
+      if (chunk.pcm16.length !== expectedSamples) {
         console.warn('[useLectureAudioStream] Unexpected PCM payload length', {
           expectedSamples,
-          received: samples.length,
+          received: chunk.pcm16.length,
         });
         return;
       }
 
-      const buffer = ctx.createBuffer(chunk.channels, chunk.samples_per_channel, chunk.sample_rate);
+      const buffer = ctx.createBuffer(chunk.channels, chunk.samplesPerChannel, chunk.sampleRate);
       for (let channel = 0; channel < chunk.channels; channel += 1) {
         const channelData = buffer.getChannelData(channel);
-        for (let i = 0; i < chunk.samples_per_channel; i += 1) {
+        for (let i = 0; i < chunk.samplesPerChannel; i += 1) {
           const sampleIndex = i * chunk.channels + channel;
-          channelData[i] = Math.max(-1, Math.min(1, samples[sampleIndex]! / PCM_MAX_VALUE));
+          channelData[i] = Math.max(-1, Math.min(1, chunk.pcm16[sampleIndex]! / PCM_MAX_VALUE));
         }
       }
 
-      const state = ensureSlideState(chunk.slide_index);
+      const state = ensureSlideState(chunk.slideIndex);
       state.queue.push({ buffer, duration: buffer.duration });
       state.pendingDuration += buffer.duration;
 
@@ -192,19 +187,19 @@ export function useLectureAudioStream() {
         const shouldStart = state.pendingDuration >= MIN_INITIAL_BUFFER_SEC;
         state.started = shouldStart;
         state.nextStartTime = ctx.currentTime;
-        updateSnapshot(chunk.slide_index, {
+        updateSnapshot(chunk.slideIndex, {
           mode: 'streaming',
           bufferedSeconds: state.pendingDuration,
           isBuffering: !shouldStart,
-          lastChunkIndex: chunk.chunk_index,
+          lastChunkIndex: chunk.chunkIndex,
         });
         if (shouldStart) {
-          setStreamingSlide(chunk.slide_index);
-          schedulePendingChunks(chunk.slide_index);
+          setStreamingSlide(chunk.slideIndex);
+          schedulePendingChunks(chunk.slideIndex);
         }
       } else {
-        schedulePendingChunks(chunk.slide_index);
-        updateSnapshot(chunk.slide_index, { lastChunkIndex: chunk.chunk_index });
+        schedulePendingChunks(chunk.slideIndex);
+        updateSnapshot(chunk.slideIndex, { lastChunkIndex: chunk.chunkIndex });
       }
     },
     [ensureGraph, ensureSlideState, schedulePendingChunks, updateSnapshot],
@@ -219,7 +214,7 @@ export function useLectureAudioStream() {
         state.queue = [];
         state.nextStartTime = audioContextRef.current?.currentTime ?? 0;
         state.isComplete = false;
-        stopAllSources();
+        stopSlideSources(status.slide_index);
         updateSnapshot(status.slide_index, {
           bufferedSeconds: 0,
           isBuffering: true,
@@ -247,7 +242,7 @@ export function useLectureAudioStream() {
         });
       }
     },
-    [ensureSlideState, stopAllSources, updateSnapshot],
+    [ensureSlideState, stopSlideSources, updateSnapshot],
   );
 
   const handleBufferUpdate = useCallback(

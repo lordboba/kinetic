@@ -517,29 +517,29 @@ export const create_lecture_main: WebsocketHandler = async (ws, req) => {
       status: "started",
     });
 
-    const handleChunk = async (chunk: TtsStreamChunk) => {
-      if (!chunk.frame) {
-        return;
-      }
+      const handleChunk = async (chunk: TtsStreamChunk) => {
+        if (!chunk.frame) {
+          return;
+        }
 
-      chunkIndex += 1;
-      const pcmBuffer = Buffer.from(
-        chunk.frame.data.buffer,
-        chunk.frame.data.byteOffset,
-        chunk.frame.data.byteLength
-      );
+        chunkIndex += 1;
+        const pcmBuffer = Buffer.from(
+          chunk.frame.data.buffer,
+          chunk.frame.data.byteOffset,
+          chunk.frame.data.byteLength
+        );
 
-      lectureAudioStreamBroker.publishChunk({
-        type: "slide_audio_chunk",
-        lecture_id,
-        slide_index: sidx,
-        chunk_index: chunkIndex,
-        sample_rate: chunk.frame.sampleRate,
-        channels: chunk.frame.channels,
-        samples_per_channel: chunk.frame.samplesPerChannel,
-        pcm16_base64: pcmBuffer.toString("base64"),
-        transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
-      });
+        lectureAudioStreamBroker.publishChunk({
+          type: "slide_audio_chunk",
+          lecture_id,
+          slide_index: sidx,
+          chunk_index: chunkIndex,
+          sample_rate: chunk.frame.sampleRate,
+          channels: chunk.frame.channels,
+          samples_per_channel: chunk.frame.samplesPerChannel,
+          pcm16: pcmBuffer,
+          transcript_delta: chunk.deltaText?.trim() ? chunk.deltaText : undefined,
+        });
 
       const chunkDurationMs =
         (chunk.frame.samplesPerChannel / chunk.frame.sampleRate) * 1000;
