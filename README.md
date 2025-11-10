@@ -36,7 +36,6 @@ app/             (reserved for future agents / orchestration tooling)
 frontend/        Next.js application and UI components
 types/           Shared Zod schemas compiled to JS/TS for reuse
 AGENTS.md        Reference for AI agent behaviors and responsibilities
-S6_WEBSOCKET_STATUS.md  Status codes and troubleshooting notes for WebSocket flows
 test-livekit.sh  Smoke test for LiveKit connectivity
 ```
 
@@ -141,8 +140,6 @@ test-livekit.sh  Smoke test for LiveKit connectivity
 | `/api/tts` | GET | WebSocket | Streams LiveKit-backed TTS (`tts.result` events). HTTP requests return 426. |
 | `/api/lecture` | GET | HTTP / WebSocket | HTTP placeholder (501). WebSocket closes with 1011 (handler pending). |
 | `/api/watch_lecture` | GET | WebSocket | Streams lecture snapshots and answers `user_question_request` prompts. HTTP requests return 426. |
-
-Consult `S6_WEBSOCKET_STATUS.md` for detailed WebSocket status codes and recovery tips.
 
 ## Diagram & Asset Generation
 
