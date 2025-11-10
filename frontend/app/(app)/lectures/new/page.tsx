@@ -183,6 +183,8 @@ export default function LectureConfiguratorPage() {
     useState<LecturePreferences | null>(null);
   const [showPreferencesCustomization, setShowPreferencesCustomization] =
     useState(false);
+  const clarifyingRequired =
+    !clarifyingQuestions || clarifyingQuestions.length === 0;
 
   // Fetch user's default preferences
   useEffect(() => {
@@ -468,6 +470,10 @@ export default function LectureConfiguratorPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (clarifyingRequired) {
+      setError("Generate clarifying questions before submitting your lecture.");
+      return;
+    }
     logger.info('Form submission started', {
       timestamp: new Date().toISOString(),
       topic: answers["lecture-topic"],
@@ -937,6 +943,11 @@ export default function LectureConfiguratorPage() {
             {error}
           </div>
         ) : null}
+        {clarifyingRequired ? (
+          <p className="text-sm font-semibold text-red-600">
+            Generate clarifying questions before submitting to the instructor duo.
+          </p>
+        ) : null}
         <div className="flex items-center justify-end gap-3">
           <button
             type="button"
@@ -957,7 +968,7 @@ export default function LectureConfiguratorPage() {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || clarifyingRequired}
             className="inline-flex items-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {isSubmitting ? "Submitting…" : "Submit & generate lecture"}
