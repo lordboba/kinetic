@@ -122,7 +122,7 @@ function ClarifyingQuestionCard({
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium">{option.text}</span>
                   <span
-                    className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-xs transition ${
+                    className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border text-xs transition ${
                       isSelected
                         ? "border-transparent bg-sky-600 text-white"
                         : "border-slate-300 bg-white text-slate-500"
